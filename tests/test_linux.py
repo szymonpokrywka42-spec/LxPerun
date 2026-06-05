@@ -172,6 +172,19 @@ class LinuxHelpersTest(unittest.TestCase):
             self.assertEqual(issues, ())
             self.assertFalse(missing.exists())
 
+    def test_python_syntax_errors_ignores_hidden_cache_trees(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidden = root / ".local" / "share" / "Steam" / "ignored.py"
+            hidden.parent.mkdir(parents=True)
+            hidden.write_text("def nope(:\n", encoding="utf-8")
+            visible = root / "good.py"
+            visible.write_text("print('ok')\n", encoding="utf-8")
+
+            issues = python_syntax_errors(root)
+
+            self.assertEqual(issues, ())
+
     def test_unique_lines_removes_duplicates_without_reordering(self) -> None:
         self.assertEqual(_unique_lines(["a", "b", "a", "  ", "c"]), ("a", "b", "c"))
 

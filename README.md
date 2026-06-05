@@ -47,6 +47,15 @@ python -m lxperun.cli help
 
 After installation, the `lxperun` and `lxperun-sys` commands are available.
 
+If you installed LxPerun with `pipx`, `sudo lxperun` may not be found because
+`sudo` often uses a restricted `PATH`. In that case use:
+
+```bash
+sudo env "PATH=$PATH" lxperun all
+```
+
+or install the packaged RPM so the command is available system-wide.
+
 By default, LxPerun shows friendly, readable values. If you want raw numbers,
 add `--raw`; if you want to disable colors, use `--no-color`.
 

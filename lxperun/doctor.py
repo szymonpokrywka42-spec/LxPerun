@@ -47,9 +47,30 @@ def python_syntax_errors(root: Path) -> tuple[DiagnosticIssue, ...]:
     if not root.exists():
         return ()
 
+    ignored_dirs = {
+        "__pycache__",
+        ".git",
+        ".hg",
+        ".svn",
+        ".cache",
+        ".config",
+        ".local",
+        ".steam",
+        ".var",
+        ".venv",
+        "venv",
+        "env",
+        ".tox",
+        ".nox",
+        "build",
+        "dist",
+        "node_modules",
+        "site-packages",
+    }
+
     issues = []
     for path in sorted(root.rglob("*.py")):
-        if "__pycache__" in path.parts:
+        if any(part in ignored_dirs for part in path.parts):
             continue
         try:
             with warnings.catch_warnings():
