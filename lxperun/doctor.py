@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import shutil
+import warnings
 
 from .linux import LinuxSnapshot, disk_usage, run_command, snapshot
 
@@ -51,7 +52,11 @@ def python_syntax_errors(root: Path) -> tuple[DiagnosticIssue, ...]:
         if "__pycache__" in path.parts:
             continue
         try:
-            compile(path.read_text(encoding="utf-8"), str(path), "exec")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                compile(path.read_text(encoding="utf-8"), str(path), "exec")
+        except (FileNotFoundError, PermissionError, OSError):
+            continue
         except (SyntaxError, UnicodeDecodeError) as error:
             issues.append(
                 DiagnosticIssue(

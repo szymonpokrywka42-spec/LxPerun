@@ -163,6 +163,15 @@ class LinuxHelpersTest(unittest.TestCase):
             self.assertEqual(issues[0].severity, "error")
             self.assertIsNotNone(issues[0].suggestion)
 
+    def test_python_syntax_errors_ignores_missing_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            missing = root / "gone.py"
+            issues = python_syntax_errors(root)
+
+            self.assertEqual(issues, ())
+            self.assertFalse(missing.exists())
+
     def test_unique_lines_removes_duplicates_without_reordering(self) -> None:
         self.assertEqual(_unique_lines(["a", "b", "a", "  ", "c"]), ("a", "b", "c"))
 

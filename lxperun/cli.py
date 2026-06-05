@@ -301,11 +301,13 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("Global options:")
     print("  --raw       show raw values instead of friendly units")
     print("  --no-color  disable ANSI colors")
+    print("  --project-root PATH  set the project root used by doctor/report/all")
     print()
     print("Examples:")
     print("  lxperun help hardware")
     print("  lxperun hardware --raw")
     print("  lxperun doctor")
+    print("  lxperun all --project-root ~/Pulpit/LxPerun")
     print("  lxperun all --limit 5")
 
 
