@@ -1,0 +1,21 @@
+pkgname=lxperun
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Friendly Linux diagnostics toolkit for developers and admins"
+arch=('any')
+url="https://example.invalid/lxperun"
+license=('GPL3')
+depends=('python')
+makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+

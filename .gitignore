@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Packaging / builds
+build/
+dist/
+*.egg-info/
+.eggs/
+wheelhouse/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local repo/release outputs
+repo/rpm/x86_64/
+repo/rpm/repodata/
+*.rpm
+*.pkg.tar.zst

@@ -1,0 +1,132 @@
+# LxPerun
+
+LxPerun is a command-line diagnostics toolkit for developers, admins, and
+anyone who wants deeper visibility into Linux than a classic fetch-style tool
+can provide. The goal is a fast inventory tool, debugger, and bug finder for
+software and hardware — without bypassing security boundaries or behaving like
+malware.
+
+LxPerun reads data from `/proc`, `/sys`, `/etc/os-release`, syscalls, and
+optionally system tools such as `systemctl`, `journalctl`, `dmesg`, `perf`,
+`bpftool`, `fwupdmgr`, or TPM tools when they are available.
+
+## Example
+
+```python
+from lxperun.linux import snapshot
+
+info = snapshot()
+print(info.identity.hostname)
+print(info.memory.used_percent)
+```
+
+CLI:
+
+```bash
+lxperun snapshot
+lxperun doctor --raw
+lxperun all --limit 5
+
+# without installation:
+python -m lxperun.cli snapshot
+python -m lxperun.cli snapshot --json
+python -m lxperun.cli doctor
+python -m lxperun.cli doctor --json
+python -m lxperun.cli rings
+python -m lxperun.cli capabilities
+python -m lxperun.cli processes
+python -m lxperun.cli services
+python -m lxperun.cli storage
+python -m lxperun.cli hardware
+python -m lxperun.cli trace
+python -m lxperun.cli crash
+python -m lxperun.cli report
+python -m lxperun.cli all
+python -m lxperun.cli help
+```
+
+After installation, the `lxperun` and `lxperun-sys` commands are available.
+
+By default, LxPerun shows friendly, readable values. If you want raw numbers,
+add `--raw`; if you want to disable colors, use `--no-color`.
+
+`snapshot` collects raw facts: kernel, distro, CPU, RAM, disks, mounts, network,
+kernel modules, and selected sysctl values.
+
+`doctor` interprets those facts: high RAM/disk/swap usage, tainted kernel,
+interfaces without IPs, failed systemd units, kernel log errors from
+`journalctl`/`dmesg`, and Python syntax errors in the current project.
+
+`rings` shows the access map from ring 3 to firmware/platform-security layers:
+what is visible with the current permissions, what is missing, and what safe
+next steps exist. LxPerun performs legal introspection only; it does not try to
+bypass kernel, hypervisor, UEFI, Intel ME, or AMD PSP isolation.
+
+`capabilities` shows what LxPerun can realistically diagnose with the current
+permissions: procfs, sysfs, `/dev/kmsg`, perf, eBPF, audit, systemd, journal,
+EFI, TPM, fwupd, and debug symbols.
+
+`processes` reads `/proc/<pid>` and shows processes, RSS memory, fd count,
+state, user, command line, and zombies.
+
+`services` reads `systemctl` and shows service health: total, active, running,
+failed, and a list of failed units.
+
+`storage` shows mounts, block devices, and I/O stats from the kernel.
+
+`hardware` shows PCI, USB, hwmon, and NUMA.
+
+`trace` shows readiness for syscall debugging and profiling, or runs a command
+under `strace` or `perf`.
+
+`crash` shows readiness for coredump analysis, a list of recent coredumps, and
+optionally details about the newest coredump.
+
+`report` generates one coherent artifact in `markdown` or `json` and can write
+it to a file. This is the best option for bug reports and sharing results.
+
+Example:
+
+```bash
+python -m lxperun.cli report --format markdown --output lxperun-report.md --latest
+python -m lxperun.cli report --format json --output lxperun-report.json
+```
+
+`all` runs the current full report set: snapshot, capabilities, rings, doctor,
+processes, services, storage, hardware, trace, and crash. Use `--json` if you
+want full data for scripts.
+
+## GitHub publishing
+
+The easiest way to distribute LxPerun online is through **GitHub Releases**.
+The workflow in `.github/workflows/release.yml` builds distribution files for
+`v*` tags and uploads them as release assets.
+
+After publishing, users can:
+
+```bash
+curl -LO https://github.com/<your-user>/<your-repo>/releases/download/v0.1.0/lxperun-0.1.0-py3-none-any.whl
+pip install ./lxperun-0.1.0-py3-none-any.whl
+```
+
+Or download the source tarball from the release and install locally:
+
+```bash
+tar -xf lxperun-0.1.0.tar.gz
+cd lxperun-0.1.0
+python -m pip install .
+```
+
+If you want to return later to native `dnf`/`pacman` packaging, the recipes are
+still available in `packaging/`.
+
+Tests:
+
+```bash
+python -m unittest discover -s tests
+```
+
+## License
+
+LxPerun is licensed under the GNU General Public License v3.0 or later. See
+`LICENSE`.
