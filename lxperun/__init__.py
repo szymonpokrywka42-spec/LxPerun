@@ -1,6 +1,7 @@
 """LxPerun Linux utility package."""
 
 from .capabilities import CapabilityProbe, CapabilityReport, capability_report
+from .clean import CleanAction, CleanReport, clean
 from .linux import (
     BlockDevice,
     CpuTimes,
@@ -39,6 +40,8 @@ __all__ = [
     "AccessMap",
     "CapabilityProbe",
     "CapabilityReport",
+    "CleanAction",
+    "CleanReport",
     "ProcessInfo",
     "ProcessReport",
     "ServiceReport",
@@ -82,6 +85,7 @@ __all__ = [
     "uptime_seconds",
     "access_map",
     "capability_report",
+    "clean",
     "inspect_process",
     "process_report",
     "top_by_memory",

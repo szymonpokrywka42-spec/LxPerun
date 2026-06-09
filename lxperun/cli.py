@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .capabilities import capability_report
+from .clean import clean as clean_system
 from .crash import crash_report
 from .doctor import diagnose
 from .formatting import human_bytes, human_sensor_value, human_uptime
@@ -64,6 +65,16 @@ def main() -> None:
     crash_parser.add_argument("--limit", type=int, default=8, help="number of coredump entries to print")
     crash_parser.add_argument("--latest", action="store_true", help="include latest coredump info")
 
+    clean_parser = subparsers.add_parser("clean", help="reclaim disk space from caches and coredumps")
+    clean_parser.add_argument("--json", action="store_true", help="print raw JSON")
+    clean_parser.add_argument("--apply", action="store_true", help="actually run cleanup commands")
+    clean_parser.add_argument(
+        "--older-than-days",
+        type=int,
+        default=7,
+        help="remove only coredumps older than this many days",
+    )
+
     report_parser = subparsers.add_parser("report", help="generate a unified LxPerun report")
     report_parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="output format")
     report_parser.add_argument("--output", help="write the report to a file")
@@ -104,6 +115,13 @@ def main() -> None:
         _print_trace(json_output=args.json, mode=args.mode, command=args.command, color_enabled=color_enabled)
     elif command == "crash":
         _print_crash(json_output=args.json, limit=args.limit, latest=args.latest, color_enabled=color_enabled)
+    elif command == "clean":
+        _print_clean(
+            json_output=args.json,
+            apply=args.apply,
+            older_than_days=args.older_than_days,
+            color_enabled=color_enabled,
+        )
     elif command == "help":
         _print_help(topic=args.topic, color_enabled=color_enabled)
     elif command == "report":
@@ -258,6 +276,13 @@ def _print_crash(json_output: bool, limit: int, latest: bool, color_enabled: boo
     _render_crash(report, color_enabled=color_enabled)
 
 
+def _print_clean(json_output: bool, apply: bool, older_than_days: int, color_enabled: bool) -> None:
+    report = clean_system(older_than_days=older_than_days, dry_run=not apply)
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_clean(report, color_enabled=color_enabled)
+
 
 def _print_help(topic: str | None, color_enabled: bool) -> None:
     guides = {
@@ -271,6 +296,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "hardware": ("PCI, USB, sensors, and NUMA.", ["Values are human-friendly by default; `--raw` shows raw numbers."]),
         "trace": ("Debugging and tracing readiness.", ["Can only report readiness or run a command under `strace`/`perf`."]),
         "crash": ("Coredump analysis.", ["Checks whether tools are available and whether the system collects crash dumps."]),
+        "clean": ("Disk cleanup.", ["Dry-runs by default; use `--apply` to remove old coredumps and clean caches."]),
         "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown or JSON."]),
         "all": ("Everything at once.", ["Combines snapshot, capabilities, rings, doctor, processes, services, storage, hardware, trace, and crash."]),
     }
@@ -294,7 +320,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("LxPerun is a simple Linux diagnostics tool — no unnecessary noise.")
     print()
     print("Key commands:")
-    for name in ("snapshot", "doctor", "processes", "services", "storage", "hardware", "trace", "crash", "rings", "capabilities", "report", "all"):
+    for name in ("snapshot", "doctor", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
         summary, _ = guides[name]
         print(f"  {name:<12} {summary}")
     print()
@@ -307,6 +333,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun help hardware")
     print("  lxperun hardware --raw")
     print("  lxperun doctor")
+    print("  lxperun clean --apply")
     print("  lxperun all --project-root ~/Pulpit/LxPerun")
     print("  lxperun all --limit 5")
 
@@ -628,6 +655,35 @@ def _render_crash(report, color_enabled: bool) -> None:
         print("Latest:")
         for line in report.latest_info.splitlines()[:40]:
             print(f"  {line}")
+    if report.recommendations:
+        print("Recommendations:")
+        for recommendation in report.recommendations:
+            print(f"  {recommendation}")
+
+
+
+def _render_clean(report, color_enabled: bool) -> None:
+    print(bold(cyan("Clean", color_enabled), color_enabled))
+    mode = "apply" if not report.dry_run else "dry-run"
+    print(f"Mode: {mode} reclaimed={human_bytes(report.total_reclaimed_bytes)}")
+    for action in report.actions:
+        if action.state in {"done", "planned"}:
+            status_style = green
+        elif action.state == "skipped":
+            status_style = yellow
+        elif action.state == "failed":
+            status_style = red
+        else:
+            status_style = dim
+        print(f"{status_style(action.name, color_enabled)} [{action.state}] {action.detail}")
+        if action.command:
+            print(f"  command: {' '.join(action.command)}")
+        if action.reclaimed_bytes:
+            print(f"  reclaimed: {human_bytes(action.reclaimed_bytes)}")
+        if action.evidence:
+            print(f"  evidence: {', '.join(action.evidence[:4])}")
+        if action.missing:
+            print(f"  missing: {', '.join(action.missing)}")
     if report.recommendations:
         print("Recommendations:")
         for recommendation in report.recommendations:
