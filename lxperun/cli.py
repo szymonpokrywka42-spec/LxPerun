@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from .capabilities import capability_report
@@ -23,6 +26,10 @@ from .ui import bold, cyan, dim, green, red, supports_color, yellow
 
 
 def main() -> None:
+    raw_argv = sys.argv[1:]
+    root_requested = "--root" in raw_argv
+    argv = [arg for arg in raw_argv if arg != "--root"]
+
     parser = argparse.ArgumentParser(description="LxPerun Linux diagnostics.")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -93,9 +100,14 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--raw", action="store_true", help="show raw numeric values where possible")
     parser.add_argument("--no-color", action="store_true", help="disable ANSI colors")
-    args = parser.parse_args()
+    parser.add_argument("--root", action="store_true", help="rerun the command through sudo for deeper access")
+    args = parser.parse_args(argv)
 
     command = args.command or "snapshot"
+    if root_requested and os.geteuid() != 0 and command in _ROOT_SENSITIVE_COMMANDS:
+        _reexec_with_sudo()
+        return
+
     color_enabled = supports_color(not args.no_color)
     if command == "doctor":
         _print_doctor(json_output=args.json, project_root=args.project_root, color_enabled=color_enabled)
@@ -136,6 +148,10 @@ def main() -> None:
         _print_all(json_output=args.json, limit=args.limit, project_root=args.project_root, raw=args.raw, color_enabled=color_enabled)
     else:
         _print_snapshot(json_output=args.json, raw=args.raw, color_enabled=color_enabled)
+
+    if not args.json and not root_requested and os.geteuid() != 0 and command in _ROOT_SENSITIVE_COMMANDS:
+        print()
+        _print_root_tip(color_enabled)
 
 
 def _print_snapshot(json_output: bool, raw: bool, color_enabled: bool) -> None:
@@ -327,6 +343,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("Global options:")
     print("  --raw       show raw values instead of friendly units")
     print("  --no-color  disable ANSI colors")
+    print("  --root      rerun the command through sudo for deeper access")
     print("  --project-root PATH  set the project root used by doctor/report/all")
     print()
     print("Examples:")
@@ -334,8 +351,42 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun hardware --raw")
     print("  lxperun doctor")
     print("  lxperun clean --apply")
+    print("  lxperun --root clean --apply")
     print("  lxperun all --project-root ~/Pulpit/LxPerun")
     print("  lxperun all --limit 5")
+
+
+_ROOT_SENSITIVE_COMMANDS = {
+    "doctor",
+    "rings",
+    "capabilities",
+    "processes",
+    "services",
+    "storage",
+    "hardware",
+    "trace",
+    "crash",
+    "clean",
+    "report",
+    "all",
+}
+
+
+def _reexec_with_sudo() -> None:
+    argv = [arg for arg in sys.argv[1:] if arg != "--root"]
+    command = [
+        "sudo",
+        "-E",
+        sys.executable,
+        "-m",
+        "lxperun.cli",
+        *argv,
+    ]
+    raise SystemExit(subprocess.call(command))
+
+
+def _print_root_tip(color_enabled: bool) -> None:
+    print(dim("Tip: add `--root` to rerun this command with sudo and unlock deeper diagnostics.", color_enabled))
 
 
 

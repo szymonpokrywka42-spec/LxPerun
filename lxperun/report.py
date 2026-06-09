@@ -90,6 +90,8 @@ def _add_capabilities_section(lines: list[str], capabilities_report: object) -> 
     lines.append("## Capabilities")
     lines.append(f"- Root: `{capabilities_report.is_root}`")
     lines.append(f"- Effective UID: `{capabilities_report.effective_uid}`")
+    if not capabilities_report.is_root:
+        lines.append("- Tip: rerun with `--root` to unlock deeper kernel, TPM, and cleanup access.")
     for probe in capabilities_report.probes:
         lines.append(f"- `{probe.name}`: `{probe.available}` - {probe.detail}")
     lines.append("")

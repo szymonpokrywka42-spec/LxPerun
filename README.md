@@ -68,7 +68,8 @@ If you prefer a native package manager install, you can still use the packaged
 RPM so the command is available system-wide.
 
 By default, LxPerun shows friendly, readable values. If you want raw numbers,
-add `--raw`; if you want to disable colors, use `--no-color`.
+add `--raw`; if you want to disable colors, use `--no-color`; if you want to
+automatically rerun a command with sudo, add `--root`.
 
 `snapshot` collects raw facts: kernel, distro, CPU, RAM, disks, mounts, network,
 kernel modules, and selected sysctl values.
@@ -119,6 +120,10 @@ python -m lxperun.cli report --format json --output lxperun-report.json
 `all` runs the current full report set: snapshot, capabilities, rings, doctor,
 processes, services, storage, hardware, trace, and crash. Use `--json` if you
 want full data for scripts.
+
+Most commands work without root and will still show useful partial data. When a
+command can benefit from deeper privileges, LxPerun prints a tip telling you to
+rerun it with `--root`.
 
 ## GitHub publishing
 
