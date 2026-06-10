@@ -46,6 +46,7 @@ python -m lxperun.cli hardware
 python -m lxperun.cli trace
 python -m lxperun.cli crash
 python -m lxperun.cli clean
+python -m lxperun.cli repair
 python -m lxperun.cli report
 python -m lxperun.cli all
 python -m lxperun.cli help
@@ -122,6 +123,11 @@ optionally details about the newest coredump.
 `clean` reclaims disk space safely: it dry-runs by default, then can remove old
 coredumps, run `flatpak uninstall --unused`, and clean supported package caches
 when you pass `--apply`.
+
+`repair` layers safe automatic fixes on top of `doctor`: it runs the cleanup
+actions, can reset failed systemd units, and then re-checks the system to show
+what changed. It is intentionally conservative and only touches things LxPerun
+can repair without guessing.
 
 `report` generates one coherent artifact in `markdown` or `json` and can write
 it to a file. This is the best option for bug reports and sharing results.

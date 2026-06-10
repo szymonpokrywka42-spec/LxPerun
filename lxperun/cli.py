@@ -20,6 +20,7 @@ from .hardware import hardware_report
 from .linux import format_bytes, snapshot
 from .network import group_sockets, network_report
 from .performance import performance_report
+from .repair import repair as repair_system
 from .processes import process_report, top_by_memory, zombie_processes
 from .report import generate_report, report_to_markdown
 from .rings import access_map
@@ -30,7 +31,7 @@ from .trace import trace_command, trace_report
 from .ui import bold, cyan, dim, green, red, supports_color, yellow
 
 
-_ROOT_SENSITIVE_COMMANDS = {"doctor", "rings", "capabilities", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "report", "all", "network", "security", "firewall", "containers"}
+_ROOT_SENSITIVE_COMMANDS = {"doctor", "rings", "capabilities", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "repair", "report", "all", "network", "security", "firewall", "containers"}
 
 
 def main() -> None:
@@ -106,6 +107,12 @@ def main() -> None:
     clean_parser.add_argument("--apply", action="store_true", help="actually run cleanup commands")
     clean_parser.add_argument("--older-than-days", type=int, default=7, help="remove only coredumps older than this many days")
 
+    repair_parser = subparsers.add_parser("repair", help="apply safe fixes for common issues")
+    repair_parser.add_argument("--json", action="store_true", help="print raw JSON")
+    repair_parser.add_argument("--apply", action="store_true", help="actually run repair commands")
+    repair_parser.add_argument("--older-than-days", type=int, default=7, help="cleanup threshold for coredumps")
+    repair_parser.add_argument("--project-root", default=".", help="scan this tree for Python syntax errors")
+
     report_parser = subparsers.add_parser("report", help="generate a unified LxPerun report")
     report_parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="output format")
     report_parser.add_argument("--output", help="write the report to a file")
@@ -165,6 +172,8 @@ def main() -> None:
         _print_crash(json_output=args.json, limit=args.limit, latest=args.latest, color_enabled=color_enabled)
     elif command == "clean":
         _print_clean(json_output=args.json, apply=args.apply, older_than_days=args.older_than_days, color_enabled=color_enabled)
+    elif command == "repair":
+        _print_repair(json_output=args.json, apply=args.apply, older_than_days=args.older_than_days, project_root=args.project_root, color_enabled=color_enabled)
     elif command == "help":
         _print_help(topic=args.topic, color_enabled=color_enabled)
     elif command == "report":
@@ -369,6 +378,14 @@ def _print_clean(json_output: bool, apply: bool, older_than_days: int, color_ena
     _render_clean(report, color_enabled=color_enabled)
 
 
+def _print_repair(json_output: bool, apply: bool, older_than_days: int, project_root: str, color_enabled: bool) -> None:
+    report = repair_system(project_root=project_root, older_than_days=older_than_days, dry_run=not apply)
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_repair(report, color_enabled=color_enabled)
+
+
 def _print_help(topic: str | None, color_enabled: bool) -> None:
     guides = {
         "snapshot": ("Quick system overview.", ["Shows host, kernel, distro, RAM, disk, network, and mounts.", "Add `--raw` if you want raw numbers where that makes sense."]),
@@ -388,6 +405,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "trace": ("Debugging and tracing readiness.", ["Can only report readiness or run a command under `strace`/`perf`."]),
         "crash": ("Coredump analysis.", ["Checks whether tools are available and whether the system collects crash dumps."]),
         "clean": ("Disk cleanup.", ["Dry-runs by default; use `--apply` to remove old coredumps and clean caches."]),
+        "repair": ("Safe repairs.", ["Runs cleanup, resets failed systemd units, and re-checks doctor output.", "Use `--apply` to execute the actions, and `--root` for system-level repairs."]),
         "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown or JSON."]),
         "all": ("Everything at once.", ["Combines snapshot, capabilities, security, containers, firewall, performance, rings, doctor, network, processes, services, storage, hardware, trace, and crash."]),
     }
@@ -409,7 +427,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("LxPerun is a simple Linux diagnostics tool — no unnecessary noise.")
     print()
     print("Key commands:")
-    for name in ("snapshot", "doctor", "network", "security", "compatibility", "firewall", "performance", "containers", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
+    for name in ("snapshot", "doctor", "network", "security", "compatibility", "firewall", "performance", "containers", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "repair", "rings", "capabilities", "report", "all"):
         summary, _ = guides[name]
         print(f"  {name:<12} {summary}")
     print()
@@ -430,6 +448,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun performance --raw")
     print("  lxperun containers --root")
     print("  lxperun clean --apply")
+    print("  lxperun repair --apply --root")
     print("  lxperun --root clean --apply")
     print("  lxperun all --project-root ~/Pulpit/LxPerun")
     print("  lxperun all --limit 5")
@@ -919,6 +938,30 @@ def _render_clean(report, color_enabled: bool) -> None:
             print(f"  evidence: {', '.join(action.evidence[:3])}")
         if action.missing:
             print(f"  missing: {', '.join(action.missing)}")
+    if report.recommendations:
+        print(dim("Recommendations", color_enabled))
+        for recommendation in report.recommendations:
+            _list_item(recommendation, color_enabled)
+
+
+def _render_repair(report, color_enabled: bool) -> None:
+    _section_header("Repair", color_enabled, "Safe fixes for common issues detected by doctor.")
+    mode = "apply" if not report.dry_run else "dry-run"
+    print(f"Mode: {mode}")
+    print(f"Issues before: {report.issues_before_count}")
+    print(f"Issues after:  {report.issues_after_count}")
+    print()
+    _render_clean(report.clean_report, color_enabled=color_enabled)
+    print()
+    print(dim("Systemd reset", color_enabled))
+    state_color = green if report.reset_failed.state == "done" else yellow if report.reset_failed.state in {"planned", "skipped"} else red
+    print(f"  {state_color(report.reset_failed.name, color_enabled)} [{state_color(report.reset_failed.state, color_enabled)}] {report.reset_failed.detail}")
+    if report.reset_failed.command:
+        print(f"    command: {' '.join(report.reset_failed.command)}")
+    if report.reset_failed.evidence:
+        print(f"    evidence: {', '.join(report.reset_failed.evidence[:4])}")
+    if report.reset_failed.missing:
+        print(f"    missing: {', '.join(report.reset_failed.missing)}")
     if report.recommendations:
         print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:

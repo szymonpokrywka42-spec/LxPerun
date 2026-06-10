@@ -3,6 +3,7 @@
 from .capabilities import CapabilityProbe, CapabilityReport, capability_report
 from .clean import CleanAction, CleanReport, clean
 from .containers import ContainerReport, container_report
+from .repair import RepairAction, RepairReport, repair
 from .firewall import FirewallBackend, FirewallPortMapping, FirewallReport, firewall_report
 from .linux import (
     BlockDevice,
@@ -60,6 +61,8 @@ __all__ = [
     "CapabilityReport",
     "CleanAction",
     "CleanReport",
+    "RepairAction",
+    "RepairReport",
     "ProcessInfo",
     "ProcessReport",
     "ServiceReport",
@@ -125,6 +128,7 @@ __all__ = [
     "performance_report",
     "capability_report",
     "clean",
+    "repair",
     "inspect_process",
     "process_report",
     "top_by_memory",

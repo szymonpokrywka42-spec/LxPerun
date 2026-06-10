@@ -48,6 +48,15 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("compatibility", output)
         self.assertIn("backward", output.lower())
 
+    def test_help_repair_mentions_safe_fixes(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "repair"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("repair", output)
+        self.assertIn("safe", output.lower())
+
     def test_help_firewall_mentions_ruleset(self) -> None:
         buffer = io.StringIO()
         with patch.object(sys, "argv", ["lxperun", "help", "firewall"]), redirect_stdout(buffer):
