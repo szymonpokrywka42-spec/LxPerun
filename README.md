@@ -95,8 +95,9 @@ ARP neighbors, conntrack entries, and interface bandwidth snapshots. Use
 
 `security` checks posture signals such as SELinux/AppArmor status, sockets
 bound to all interfaces, UID 0 accounts, passwordless shadow entries when run
-as root, and world-writable paths under `/etc`, `/opt`, and `/usr/local`.
-Add `--root` to unlock deeper checks.
+as root, container/cgroup markers, runtime API sockets, namespace visibility,
+and world-writable paths under `/etc`, `/opt`, and `/usr/local`. Add `--root`
+to unlock deeper checks.
 
 `processes` reads `/proc/<pid>` and shows processes, RSS memory, fd count,
 state, user, command line, and zombies.

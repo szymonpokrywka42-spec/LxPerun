@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import re
 from pathlib import Path
 import os
 import shutil
@@ -79,10 +80,13 @@ def security_report(
         _root_signal(is_root),
         _selinux_signal(root, which_fn, run_command_fn),
         _apparmor_signal(root, which_fn, run_command_fn),
+        _container_cgroup_signal(root),
+        _namespace_signal(root),
     )
 
     findings: list[SecurityFinding] = []
     findings.extend(_exposed_listener_findings(network.listening_sockets))
+    findings.extend(_container_socket_findings(root))
     findings.extend(_uid0_findings(root))
     if is_root:
         findings.extend(_shadow_findings(root))
@@ -168,6 +172,100 @@ def _apparmor_signal(root: Path, which_fn: Callable[[str], str | None], run_comm
         evidence=(),
         missing=("aa-status not installed or AppArmor not mounted",),
     )
+
+
+def _container_cgroup_signal(root: Path) -> SecuritySignal:
+    cgroup = root / "proc" / "1" / "cgroup"
+    if not cgroup.exists():
+        return SecuritySignal(
+            name="container",
+            available=False,
+            detail="No /proc/1/cgroup data is available.",
+            evidence=(),
+            missing=("/proc/1/cgroup not visible",),
+        )
+
+    lines = _read_lines(cgroup)
+    markers = []
+    for line in lines:
+        lowered = line.lower()
+        if any(token in lowered for token in ("docker", "podman", "libpod", "lxc", "kubepods", "containerd", "machine.slice")):
+            markers.append(line)
+    if markers:
+        return SecuritySignal(
+            name="container",
+            available=True,
+            detail="Container cgroup markers were detected.",
+            evidence=tuple(markers[:8]),
+        )
+    return SecuritySignal(
+        name="container",
+        available=False,
+        detail="No obvious container cgroup markers were detected.",
+        evidence=tuple(lines[:8]),
+    )
+
+
+def _namespace_signal(root: Path) -> SecuritySignal:
+    namespace_paths = (
+        root / "proc" / "1" / "ns" / "pid",
+        root / "proc" / "1" / "ns" / "net",
+        root / "proc" / "1" / "ns" / "mnt",
+        root / "proc" / "self" / "ns" / "pid",
+        root / "proc" / "self" / "ns" / "net",
+        root / "proc" / "self" / "ns" / "mnt",
+    )
+    entries = []
+    for namespace_path in namespace_paths:
+        try:
+            target = os.readlink(namespace_path)
+        except OSError:
+            continue
+        entries.append(f"{namespace_path} -> {target}")
+    if not entries:
+        return SecuritySignal(
+            name="namespaces",
+            available=False,
+            detail="Namespace links are not visible.",
+            evidence=(),
+            missing=("/proc/*/ns/* not visible",),
+        )
+    return SecuritySignal(
+        name="namespaces",
+        available=True,
+        detail="Namespace links are visible for pid, net, and mount.",
+        evidence=tuple(entries[:8]),
+    )
+
+
+def _container_socket_findings(root: Path) -> list[SecurityFinding]:
+    findings: list[SecurityFinding] = []
+    socket_paths = (
+        root / "var" / "run" / "docker.sock",
+        root / "run" / "docker.sock",
+        root / "run" / "podman" / "podman.sock",
+        root / "var" / "run" / "podman" / "podman.sock",
+    )
+    exposed = []
+    for socket_path in socket_paths:
+        try:
+            mode = os.stat(socket_path).st_mode
+        except OSError:
+            continue
+        if stat.S_ISSOCK(mode):
+            exposed.append(str(socket_path))
+    if exposed:
+        findings.append(
+            SecurityFinding(
+                category="container",
+                severity="warning",
+                message="Container runtime API sockets are present.",
+                detail="A local process with access to these sockets can control containers and, depending on configuration, the host.",
+                suggestion="Restrict socket access or disable the runtime API when it is not needed.",
+                evidence=tuple(exposed[:10]),
+            )
+        )
+    return findings
 
 
 def _exposed_listener_findings(sockets) -> list[SecurityFinding]:

@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import os
+import socket
 import tempfile
 import unittest
 
@@ -97,6 +98,46 @@ class SecurityTest(unittest.TestCase):
 
             permission_findings = [finding for finding in report.findings if finding.category == "permissions"]
             self.assertFalse(permission_findings)
+
+    def test_container_signals_and_runtime_socket_are_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            proc = root / "proc"
+            (proc / "1").mkdir(parents=True)
+            (proc / "1" / "cgroup").write_text("0::/docker/1234\n", encoding="utf-8")
+            for namespace_name in ("pid", "net", "mnt"):
+                namespace_dir = proc / "1" / "ns"
+                namespace_dir.mkdir(exist_ok=True)
+                (namespace_dir / namespace_name).symlink_to(f"{namespace_name}:[4026531836]")
+            self_ns_dir = proc / "self" / "ns"
+            self_ns_dir.mkdir(parents=True)
+            for namespace_name in ("pid", "net", "mnt"):
+                (self_ns_dir / namespace_name).symlink_to(f"{namespace_name}:[4026532448]")
+
+            run_dir = root / "run"
+            run_dir.mkdir()
+            docker_socket = run_dir / "docker.sock"
+            podman_dir = run_dir / "podman"
+            podman_dir.mkdir()
+            podman_socket = podman_dir / "podman.sock"
+            for socket_path in (docker_socket, podman_socket):
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                try:
+                    sock.bind(str(socket_path))
+                finally:
+                    sock.close()
+
+            report = security_report(
+                root=root,
+                network_report_obj=SimpleNamespace(listening_sockets=()),
+                is_root_fn=lambda: 1000,
+            )
+
+            container_signal = next(signal for signal in report.signals if signal.name == "container")
+            namespace_signal = next(signal for signal in report.signals if signal.name == "namespaces")
+            self.assertTrue(container_signal.available)
+            self.assertTrue(namespace_signal.available)
+            self.assertTrue(any(finding.category == "container" for finding in report.findings))
 
 
 if __name__ == "__main__":
