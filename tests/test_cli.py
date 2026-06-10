@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from lxperun.cli import _render_hardware, main
+from lxperun.cli import _print_banner, _render_hardware, main
 
 
 class CliHelpTest(unittest.TestCase):
@@ -123,6 +123,17 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("1:2", output)
         self.assertIn("1234:abcd", output)
         self.assertIn("node0", output)
+
+    def test_banner_mentions_name_and_tagline(self) -> None:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            _print_banner(color_enabled=False)
+
+        output = buffer.getvalue()
+        self.assertIn("LxPerun", output)
+        self.assertIn("Linux diagnostics, made readable.", output)
+        self.assertIn("╭", output)
+        self.assertIn("╰", output)
 
 
 if __name__ == "__main__":

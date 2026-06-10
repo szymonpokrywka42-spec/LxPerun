@@ -429,6 +429,16 @@ def _print_root_tip(color_enabled: bool) -> None:
     print(dim("Tip: add `--root` to rerun this command with sudo and unlock deeper diagnostics.", color_enabled))
 
 
+def _print_banner(color_enabled: bool) -> None:
+    width = 72
+    title = "LxPerun"
+    subtitle = "Linux diagnostics, made readable."
+    print(cyan("╭" + "─" * width + "╮", color_enabled))
+    print(cyan("│", color_enabled) + f" {bold(cyan(title, color_enabled), color_enabled):<{width - 2}} " + cyan("│", color_enabled))
+    print(cyan("│", color_enabled) + f" {dim(subtitle, color_enabled):<{width - 2}} " + cyan("│", color_enabled))
+    print(cyan("╰" + "─" * width + "╯", color_enabled))
+
+
 def _section_header(title: str, color_enabled: bool, subtitle: str | None = None) -> None:
     print(bold(cyan(title, color_enabled), color_enabled))
     print(dim("─" * 72, color_enabled))
@@ -470,6 +480,8 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     if json_output:
         print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "security": security.to_dict(), "containers": containers.to_dict(), "firewall": firewall.to_dict(), "performance": performance.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
         return
+    _print_banner(color_enabled)
+    print()
     _section_header("LxPerun All", color_enabled, "A single pass across the whole diagnostics stack.")
     _render_snapshot(info, raw=raw, color_enabled=color_enabled)
     print()
