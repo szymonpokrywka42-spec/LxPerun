@@ -104,7 +104,8 @@ def _add_security_section(lines: list[str], security_report_obj: object) -> None
     lines.append(f"- Root: `{security_report_obj.is_root}`")
     lines.append(f"- Effective UID: `{security_report_obj.effective_uid}`")
     lines.append(f"- Signals: `{len(security_report_obj.signals)}`")
-    lines.append(f"- Findings: `{len(security_report_obj.findings)}`")
+    lines.append(f"- Issues: `{getattr(security_report_obj, 'issue_count', 0)}`")
+    lines.append(f"- Advisories: `{getattr(security_report_obj, 'advisory_count', 0)}`")
     for finding in security_report_obj.findings[:10]:
         lines.append(f"- `{finding.severity.upper()}` `{finding.category}`: {finding.message}")
     for recommendation in security_report_obj.recommendations:

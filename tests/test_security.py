@@ -79,6 +79,25 @@ class SecurityTest(unittest.TestCase):
             self.assertTrue(permission_findings)
             self.assertIn(str(world_writable), permission_findings[0].evidence)
 
+    def test_symlinks_do_not_trigger_world_writable_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            etc = root / "etc"
+            etc.mkdir()
+            target = root / "shared.conf"
+            target.write_text("demo", encoding="utf-8")
+            os.chmod(target, 0o666)
+            (etc / "shared.conf").symlink_to(target)
+
+            report = security_report(
+                root=root,
+                network_report_obj=SimpleNamespace(listening_sockets=()),
+                is_root_fn=lambda: 1000,
+            )
+
+            permission_findings = [finding for finding in report.findings if finding.category == "permissions"]
+            self.assertFalse(permission_findings)
+
 
 if __name__ == "__main__":
     unittest.main()

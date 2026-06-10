@@ -475,6 +475,12 @@ def _render_security(report, color_enabled: bool) -> None:
     root_text = "yes" if report.is_root else "no"
     print(bold(cyan("Security", color_enabled), color_enabled))
     print(f"Effective UID: {report.effective_uid} root={root_text}")
+    if report.issue_count:
+        print(yellow(f"Summary: {report.issue_count} issue(s), {report.advisory_count} advisory finding(s).", color_enabled))
+    elif report.advisory_count:
+        print(green(f"Summary: {report.advisory_count} advisory finding(s).", color_enabled))
+    else:
+        print(green("Summary: no notable security posture issues found.", color_enabled))
     print("Signals:")
     for signal in report.signals:
         status = "yes" if signal.available else "no"

@@ -50,6 +50,14 @@ class SecurityReport:
     def ok(self) -> bool:
         return not any(finding.severity in {"warning", "error", "critical"} for finding in self.findings)
 
+    @property
+    def advisory_count(self) -> int:
+        return sum(1 for finding in self.findings if finding.severity == "warning")
+
+    @property
+    def issue_count(self) -> int:
+        return sum(1 for finding in self.findings if finding.severity in {"error", "critical"})
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
@@ -176,8 +184,8 @@ def _exposed_listener_findings(sockets) -> list[SecurityFinding]:
             SecurityFinding(
                 category="network",
                 severity="warning",
-                message="Services are bound to all interfaces.",
-                detail="These sockets are reachable from any local interface unless a firewall blocks them.",
+                message="Some services are listening on all interfaces.",
+                detail="That is sometimes intentional, but it is worth reviewing if the service should stay local.",
                 suggestion="Bind to localhost or a specific interface if the service should not be externally reachable.",
                 evidence=tuple(exposed[:25]),
             )
@@ -270,7 +278,8 @@ def _scan_world_writable(base: Path, limit: int) -> list[str]:
             break
         current = Path(root)
         try:
-            if os.lstat(current).st_mode & stat.S_IWOTH:
+            current_stat = os.lstat(current)
+            if stat.S_ISDIR(current_stat.st_mode) and current_stat.st_mode & stat.S_IWOTH:
                 matches.append(str(current))
                 if len(matches) >= limit:
                     break
@@ -281,7 +290,10 @@ def _scan_world_writable(base: Path, limit: int) -> list[str]:
                 break
             path = current / name
             try:
-                if os.lstat(path).st_mode & stat.S_IWOTH:
+                path_stat = os.lstat(path)
+                if not (stat.S_ISREG(path_stat.st_mode) or stat.S_ISDIR(path_stat.st_mode)):
+                    continue
+                if path_stat.st_mode & stat.S_IWOTH:
                     matches.append(str(path))
             except OSError:
                 continue
