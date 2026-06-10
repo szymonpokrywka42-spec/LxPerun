@@ -3,9 +3,10 @@ import os
 import sys
 import unittest
 from contextlib import redirect_stdout
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from lxperun.cli import main
+from lxperun.cli import _render_hardware, main
 
 
 class CliHelpTest(unittest.TestCase):
@@ -90,6 +91,38 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("clean", calls[0])
         self.assertIn("--apply", calls[0])
         self.assertNotIn("--root", calls[0])
+
+    def test_render_hardware_uses_usb_fields_without_crashing(self) -> None:
+        report = SimpleNamespace(
+            pci_count=0,
+            usb_count=1,
+            sensor_count=0,
+            numa_count=1,
+            pci_devices=(),
+            usb_devices=(
+                SimpleNamespace(
+                    path="1-1",
+                    busnum=1,
+                    devnum=2,
+                    id_vendor="1234",
+                    id_product="abcd",
+                    manufacturer="Acme",
+                    product="Keyboard",
+                ),
+            ),
+            sensors=(),
+            numa_nodes=(SimpleNamespace(name="node0", cpulist="0-3", mem_total_kb=1024, mem_free_kb=512),),
+        )
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            _render_hardware(report, limit=12, raw=False, color_enabled=False)
+
+        output = buffer.getvalue()
+        self.assertIn("USB:", output)
+        self.assertIn("1:2", output)
+        self.assertIn("1234:abcd", output)
+        self.assertIn("node0", output)
 
 
 if __name__ == "__main__":

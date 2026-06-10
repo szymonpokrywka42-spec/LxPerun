@@ -777,7 +777,10 @@ def _render_hardware(report, limit: int, raw: bool, color_enabled: bool) -> None
     if report.usb_devices:
         print("USB:")
         for device in report.usb_devices[:limit]:
-            print(f"  {device.bus_id:<12} {device.vendor_id or '-'}:{device.product_id or '-'} {device.manufacturer or ''} {device.product or ''}".rstrip())
+            bus_label = device.path
+            if device.busnum is not None:
+                bus_label = f"{device.busnum}:{device.devnum}" if device.devnum is not None else str(device.busnum)
+            print(f"  {bus_label:<12} {device.id_vendor or '-'}:{device.id_product or '-'} {device.manufacturer or ''} {device.product or ''}".rstrip())
     if report.sensors:
         print("Sensors:")
         for sensor in report.sensors[:limit]:
@@ -785,7 +788,7 @@ def _render_hardware(report, limit: int, raw: bool, color_enabled: bool) -> None
     if report.numa_nodes:
         print("NUMA:")
         for node in report.numa_nodes[:limit]:
-            print(f"  {node.name:<8} cpus={node.cpu_list or '-'} mem_total_kb={node.mem_total_kb or '-'} mem_free_kb={node.mem_free_kb or '-'}")
+            print(f"  {node.name:<8} cpus={node.cpulist or '-'} mem_total_kb={node.mem_total_kb or '-'} mem_free_kb={node.mem_free_kb or '-'}")
 
 
 def _render_trace_report(report, color_enabled: bool) -> None:
