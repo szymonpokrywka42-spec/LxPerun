@@ -13,7 +13,7 @@ from .clean import clean as clean_system
 from .compatibility import compatibility_report
 from .crash import crash_report
 from .containers import container_report
-from .doctor import diagnose
+from .doctor import diagnose, group_issues
 from .firewall import firewall_report
 from .formatting import human_bytes, human_sensor_value, human_uptime
 from .hardware import hardware_report
@@ -48,6 +48,7 @@ def main() -> None:
     doctor_parser = subparsers.add_parser("doctor", help="diagnose common system problems")
     doctor_parser.add_argument("--json", action="store_true", help="print raw JSON")
     doctor_parser.add_argument("--project-root", default=".", help="scan this tree for Python syntax errors")
+    doctor_parser.add_argument("--ungroup", action="store_true", help="show every issue individually")
 
     rings_parser = subparsers.add_parser("rings", help="show privilege and platform-layer access")
     rings_parser.add_argument("--json", action="store_true", help="print raw JSON")
@@ -142,7 +143,7 @@ def main() -> None:
 
     color_enabled = supports_color(not args.no_color)
     if command == "doctor":
-        _print_doctor(json_output=args.json, project_root=args.project_root, color_enabled=color_enabled)
+        _print_doctor(json_output=args.json, project_root=args.project_root, ungroup=args.ungroup, color_enabled=color_enabled)
     elif command == "rings":
         _print_rings(json_output=args.json, color_enabled=color_enabled)
     elif command == "capabilities":
@@ -223,12 +224,12 @@ def _render_snapshot(info, raw: bool, color_enabled: bool) -> None:
     print(f"Modules:   {len(info.kernel_modules)}")
 
 
-def _print_doctor(json_output: bool, project_root: str, color_enabled: bool) -> None:
+def _print_doctor(json_output: bool, project_root: str, ungroup: bool, color_enabled: bool) -> None:
     report = diagnose(project_root)
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-    _render_doctor(report, color_enabled=color_enabled)
+    _render_doctor(report, ungroup=ungroup, color_enabled=color_enabled)
 
 
 def _print_rings(json_output: bool, color_enabled: bool) -> None:
@@ -390,7 +391,7 @@ def _print_repair(json_output: bool, apply: bool, yes: bool, older_than_days: in
 def _print_help(topic: str | None, color_enabled: bool) -> None:
     guides = {
         "snapshot": ("Quick system overview.", ["Shows host, kernel, distro, RAM, disk, network, and mounts.", "Add `--raw` if you want raw numbers where that makes sense."]),
-        "doctor": ("System problem diagnostics.", ["Scans kernel, systemd, logs, and Python syntax errors.", "A good first step when you are chasing a root cause."]),
+        "doctor": ("System problem diagnostics.", ["Scans kernel, systemd, logs, and Python syntax errors.", "Add `--ungroup` to see every issue individually instead of grouped summaries."]),
         "rings": ("Access layers from user space to firmware.", ["Shows what LxPerun can see without root and where the limits are."]),
         "capabilities": ("What LxPerun can currently inspect.", ["Audits access to procfs, sysfs, journal, perf, BPF, and TPM."]),
         "network": ("Socket, ARP, conntrack, and bandwidth diagnostics.", ["Shows listening ports, per-PID sockets, ARP entries, conntrack, and rx/tx samples.", "Add `--watch` to refresh the view live."]),
@@ -442,6 +443,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun help hardware")
     print("  lxperun hardware --raw")
     print("  lxperun doctor")
+    print("  lxperun doctor --ungroup")
     print("  lxperun security --root")
     print("  lxperun compatibility")
     print("  lxperun firewall --root")
@@ -541,7 +543,7 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     print()
     _render_rings(rings, color_enabled=color_enabled)
     print()
-    _render_doctor(doctor, color_enabled=color_enabled)
+    _render_doctor(doctor, ungroup=False, color_enabled=color_enabled)
     print()
     _render_network(network, color_enabled=color_enabled)
     print()
@@ -558,19 +560,37 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     _render_crash(crash, color_enabled=color_enabled)
 
 
-def _render_doctor(report, color_enabled: bool) -> None:
+def _render_doctor(report, ungroup: bool, color_enabled: bool) -> None:
     _section_header("Doctor", color_enabled, "Kernel, logs, services, and syntax diagnostics.")
     if not report.issues:
         print(green("LxPerun doctor: no issues found.", color_enabled))
         return
-    print(yellow(f"LxPerun doctor: {len(report.issues)} issue(s) found.", color_enabled))
-    for issue in report.issues:
-        severity_style = green if issue.severity in {"info", "ok"} else yellow if issue.severity == "warning" else red
-        print(f"{severity_style(f'[{issue.severity.upper()}]', color_enabled)} {issue.source}: {issue.message}")
-        if issue.detail:
-            print(f"  {issue.detail}")
-        if issue.suggestion:
-            print(f"  suggestion: {issue.suggestion}")
+    if ungroup:
+        print(yellow(f"LxPerun doctor: {len(report.issues)} issue(s) found.", color_enabled))
+        print(dim("Raw issues", color_enabled))
+        for issue in report.issues:
+            severity_style = green if issue.severity in {"info", "ok"} else yellow if issue.severity == "warning" else red
+            print(f"  {severity_style(f'[{issue.severity.upper()}]', color_enabled)} {issue.source}: {issue.message}")
+            if issue.detail:
+                print(f"    {issue.detail}")
+            if issue.suggestion:
+                print(f"    suggestion: {issue.suggestion}")
+        return
+
+    grouped = group_issues(report.issues)
+    print(yellow(f"LxPerun doctor: {len(report.issues)} issue(s) found in {len(grouped)} grouped finding(s).", color_enabled))
+    for group in grouped:
+        severity_style = green if group.severity in {"info", "ok"} else yellow if group.severity == "warning" else red
+        occurrence_label = "occurrence" if group.count == 1 else "occurrences"
+        print(f"{severity_style(f'[{group.severity.upper()}]', color_enabled)} {group.title} ({group.count} {occurrence_label})")
+        for issue in group.issues[:2]:
+            sample = issue.detail or issue.message
+            print(f"  {sample}")
+        if group.count > 2:
+            print(f"  ... {group.count - 2} more")
+        suggestion = next((issue.suggestion for issue in group.issues if issue.suggestion), None)
+        if suggestion:
+            print(f"  suggestion: {suggestion}")
 
 
 def _render_rings(report, color_enabled: bool) -> None:

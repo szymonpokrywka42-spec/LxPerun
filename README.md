@@ -74,6 +74,8 @@ kernel modules, and selected sysctl values.
 `doctor` interprets those facts: high RAM/disk/swap usage, tainted kernel,
 interfaces without IPs, failed systemd units, kernel log errors from
 `journalctl`/`dmesg`, and Python syntax errors in the current project.
+It groups repeated kernel-log noise into readable findings by default; use
+`--ungroup` if you want every raw entry listed one by one.
 
 `rings` shows the access map from ring 3 to firmware/platform-security layers:
 what is visible with the current permissions, what is missing, and what safe

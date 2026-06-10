@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 import shutil
 import warnings
+import re
 
 from .linux import LinuxSnapshot, disk_usage, run_command, snapshot
 
@@ -17,6 +18,20 @@ class DiagnosticIssue:
     message: str
     detail: str | None = None
     suggestion: str | None = None
+
+
+@dataclass(frozen=True)
+class IssueGroup:
+    severity: str
+    title: str
+    issues: tuple[DiagnosticIssue, ...]
+
+    @property
+    def count(self) -> int:
+        return len(self.issues)
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -41,6 +56,58 @@ def diagnose(project_root: Path | str = ".") -> DoctorReport:
     issues.extend(_kernel_log_checks())
     issues.extend(python_syntax_errors(Path(project_root)))
     return DoctorReport(tuple(issues))
+
+
+def group_issues(issues: tuple[DiagnosticIssue, ...]) -> tuple[IssueGroup, ...]:
+    grouped: list[IssueGroup] = []
+    bucket: dict[tuple[str, str], list[DiagnosticIssue]] = {}
+    order: list[tuple[str, str]] = []
+    for issue in issues:
+        key = (_group_severity(issue), _issue_title(issue))
+        if key not in bucket:
+            bucket[key] = []
+            order.append(key)
+        bucket[key].append(issue)
+    for key in order:
+        grouped.append(IssueGroup(severity=key[0], title=key[1], issues=tuple(bucket[key])))
+    return tuple(grouped)
+
+
+def _group_severity(issue: DiagnosticIssue) -> str:
+    return issue.severity
+
+
+def _issue_title(issue: DiagnosticIssue) -> str:
+    if issue.source in {"kernel-log", "dmesg"}:
+        return _kernel_log_title(issue.detail or issue.message)
+    if issue.source == "systemd" and issue.message.startswith("Failed unit: "):
+        unit = issue.message.removeprefix("Failed unit: ").strip()
+        return f"Failed unit: {unit}"
+    if issue.source == "python" and issue.message.startswith("Syntax error in "):
+        return issue.message
+    if issue.message:
+        return issue.message
+    return issue.source
+
+
+def _kernel_log_title(text: str) -> str:
+    normalized = text.lower()
+    if "bluetooth" in normalized and ("sco packet" in normalized or "corrupted sco packet" in normalized):
+        return "Bluetooth driver issues"
+    if "rndis_host" in normalized and "netdev watchdog" in normalized:
+        return "RNDIS network watchdog timeouts"
+    if "x.509" in normalized and "certificate" in normalized:
+        return "X.509 certificate load issue"
+    if "selinux" in normalized:
+        return "SELinux compatibility warning"
+    if "tainted" in normalized:
+        return "Kernel taint warning"
+
+    match = re.search(r"kernel:\s*(.+)$", text, flags=re.IGNORECASE)
+    if match:
+        summary = match.group(1).strip()
+        return summary.split(":")[0] if ":" in summary else summary
+    return "Kernel log issue"
 
 
 def python_syntax_errors(root: Path) -> tuple[DiagnosticIssue, ...]:

@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from lxperun.cli import _print_banner, _render_hardware, main
+from lxperun.cli import _print_banner, _render_doctor, _render_hardware, main
 
 
 class CliHelpTest(unittest.TestCase):
@@ -19,6 +19,15 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("LxPerun", output)
         self.assertIn("hardware", output)
         self.assertIn("--raw", output)
+
+    def test_help_doctor_mentions_ungroup(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "doctor"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("doctor", output)
+        self.assertIn("--ungroup", output)
 
     def test_help_network_mentions_watch_mode(self) -> None:
         buffer = io.StringIO()
@@ -153,6 +162,28 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("Linux diagnostics, made readable.", output)
         self.assertIn("╭", output)
         self.assertIn("╰", output)
+
+    def test_render_doctor_groups_kernel_log_entries(self) -> None:
+        report = SimpleNamespace(
+            issues=(
+                SimpleNamespace(severity="error", source="kernel-log", message="Kernel error log entry.", detail="Jun 10 kernel: Bluetooth: hci0: corrupted SCO packet", suggestion="Inspect surrounding boot logs."),
+                SimpleNamespace(severity="error", source="kernel-log", message="Kernel error log entry.", detail="Jun 10 kernel: Bluetooth: hci0: SCO packet for unknown connection handle 257", suggestion="Inspect surrounding boot logs."),
+                SimpleNamespace(severity="error", source="kernel-log", message="Kernel error log entry.", detail="Jun 10 kernel: rndis_host 3-2:1.0 enp10s0f3u2: NETDEV WATCHDOG: CPU: 1: transmit queue 0 timed out 5142 ms", suggestion="Inspect surrounding boot logs."),
+                SimpleNamespace(severity="warning", source="kernel-log", message="Kernel error log entry.", detail="Jun 10 kernel: integrity: Problem loading X.509 certificate -22", suggestion="Inspect surrounding boot logs."),
+                SimpleNamespace(severity="warning", source="kernel-log", message="Kernel error log entry.", detail="Jun 10 kernel: SELinux: systemd-tmpfile wrote to checkreqprot.", suggestion="Inspect surrounding boot logs."),
+            )
+        )
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            _render_doctor(report, ungroup=False, color_enabled=False)
+
+        output = buffer.getvalue()
+        self.assertIn("Bluetooth driver issues (2 occurrences)", output)
+        self.assertIn("RNDIS network watchdog timeouts (1 occurrence)", output)
+        self.assertIn("X.509 certificate load issue (1 occurrence)", output)
+        self.assertIn("SELinux compatibility warning (1 occurrence)", output)
+        self.assertIn("Inspect surrounding boot logs.", output)
 
 
 if __name__ == "__main__":
