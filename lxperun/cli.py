@@ -433,10 +433,14 @@ def _print_banner(color_enabled: bool) -> None:
     width = 72
     title = "LxPerun"
     subtitle = "Linux diagnostics, made readable."
-    print(cyan("╭" + "─" * width + "╮", color_enabled))
-    print(cyan("│", color_enabled) + f" {bold(cyan(title, color_enabled), color_enabled):<{width - 2}} " + cyan("│", color_enabled))
-    print(cyan("│", color_enabled) + f" {dim(subtitle, color_enabled):<{width - 2}} " + cyan("│", color_enabled))
-    print(cyan("╰" + "─" * width + "╯", color_enabled))
+    top = "╭" + "─" * width + "╮"
+    title_line = f"│ {title:<{width - 2}} │"
+    subtitle_line = f"│ {subtitle:<{width - 2}} │"
+    bottom = "╰" + "─" * width + "╯"
+    print(cyan(top, color_enabled))
+    print(cyan(title_line, color_enabled))
+    print(cyan(subtitle_line, color_enabled))
+    print(cyan(bottom, color_enabled))
 
 
 def _section_header(title: str, color_enabled: bool, subtitle: str | None = None) -> None:
