@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .capabilities import capability_report
 from .clean import clean as clean_system
+from .compatibility import compatibility_report
 from .crash import crash_report
 from .containers import container_report
 from .doctor import diagnose
@@ -60,6 +61,9 @@ def main() -> None:
 
     security_parser = subparsers.add_parser("security", help="show security posture checks")
     security_parser.add_argument("--json", action="store_true", help="print raw JSON")
+
+    compatibility_parser = subparsers.add_parser("compatibility", help="show backward-compatibility support matrix")
+    compatibility_parser.add_argument("--json", action="store_true", help="print raw JSON")
 
     firewall_parser = subparsers.add_parser("firewall", help="audit firewall rules against open ports")
     firewall_parser.add_argument("--json", action="store_true", help="print raw JSON")
@@ -139,6 +143,8 @@ def main() -> None:
         _print_network(json_output=args.json, watch=args.watch, interval=args.interval, color_enabled=color_enabled)
     elif command == "security":
         _print_security(json_output=args.json, color_enabled=color_enabled)
+    elif command == "compatibility":
+        _print_compatibility(json_output=args.json, color_enabled=color_enabled)
     elif command == "firewall":
         _print_firewall(json_output=args.json, color_enabled=color_enabled)
     elif command == "performance":
@@ -264,6 +270,14 @@ def _print_security(json_output: bool, color_enabled: bool) -> None:
     _render_security(report, color_enabled=color_enabled)
 
 
+def _print_compatibility(json_output: bool, color_enabled: bool) -> None:
+    report = compatibility_report()
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_compatibility(report, color_enabled=color_enabled)
+
+
 def _print_firewall(json_output: bool, color_enabled: bool) -> None:
     report = firewall_report()
     if json_output:
@@ -363,6 +377,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "capabilities": ("What LxPerun can currently inspect.", ["Audits access to procfs, sysfs, journal, perf, BPF, and TPM."]),
         "network": ("Socket, ARP, conntrack, and bandwidth diagnostics.", ["Shows listening ports, per-PID sockets, ARP entries, conntrack, and rx/tx samples.", "Add `--watch` to refresh the view live."]),
         "security": ("Security posture checks.", ["Checks SELinux/AppArmor status, exposed listeners, UID 0 accounts, and loose permissions.", "Add `--root` for deeper checks such as /etc/shadow."]),
+        "compatibility": ("Backward-compatibility matrix.", ["Shows which core features work on older kernels and which ones fall back gracefully."]),
         "firewall": ("Firewall audit.", ["Shows iptables/nftables rules and maps listening sockets to allow/block decisions."]),
         "performance": ("Performance deep-dive.", ["Shows PSI, interrupt distribution, softirqs, and slab caches. Add `--raw` for raw counters."]),
         "containers": ("Container visibility.", ["Shows cgroup markers, runtime sockets, and namespace visibility."]),
@@ -394,7 +409,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("LxPerun is a simple Linux diagnostics tool — no unnecessary noise.")
     print()
     print("Key commands:")
-    for name in ("snapshot", "doctor", "network", "security", "firewall", "performance", "containers", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
+    for name in ("snapshot", "doctor", "network", "security", "compatibility", "firewall", "performance", "containers", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
         summary, _ = guides[name]
         print(f"  {name:<12} {summary}")
     print()
@@ -409,6 +424,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun hardware --raw")
     print("  lxperun doctor")
     print("  lxperun security --root")
+    print("  lxperun compatibility")
     print("  lxperun firewall --root")
     print("  lxperun performance")
     print("  lxperun performance --raw")
@@ -468,6 +484,7 @@ def _print_report(output_format: str, output: str | None, limit: int, project_ro
 def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, color_enabled: bool) -> None:
     info = snapshot()
     capabilities = capability_report()
+    compatibility = compatibility_report()
     security = security_report()
     firewall = firewall_report()
     performance = performance_report()
@@ -482,7 +499,7 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     trace = trace_report()
     crash = crash_report()
     if json_output:
-        print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "security": security.to_dict(), "containers": containers.to_dict(), "firewall": firewall.to_dict(), "performance": performance.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
+        print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "compatibility": compatibility.to_dict(), "security": security.to_dict(), "containers": containers.to_dict(), "firewall": firewall.to_dict(), "performance": performance.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
         return
     _print_banner(color_enabled)
     print()
@@ -490,6 +507,8 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     _render_snapshot(info, raw=raw, color_enabled=color_enabled)
     print()
     _render_capabilities(capabilities, color_enabled=color_enabled)
+    print()
+    _render_compatibility(compatibility, color_enabled=color_enabled)
     print()
     _render_security(security, color_enabled=color_enabled)
     print()
@@ -593,6 +612,28 @@ def _render_security(report, color_enabled: bool) -> None:
                 print(f"    evidence: {', '.join(finding.evidence[:5])}")
     else:
         print(green("No security posture issues found.", color_enabled))
+    if report.recommendations:
+        print(dim("Recommendations", color_enabled))
+        for recommendation in report.recommendations:
+            _list_item(recommendation, color_enabled)
+
+
+def _render_compatibility(report, color_enabled: bool) -> None:
+    _section_header("Compatibility", color_enabled, "Backward-compatibility support across kernels and distros.")
+    print(f"Kernel: {report.kernel_release}")
+    if report.kernel_version is not None:
+        major, minor, patch = report.kernel_version
+        print(f"Parsed kernel version: {major}.{minor}.{patch}")
+    if report.distro:
+        print(f"Distro: {report.distro}")
+    print(f"Legacy mode: {'yes' if report.legacy_mode else 'no'}")
+    for check in report.checks:
+        state = "yes" if check.available else "no"
+        print(f"{check.name:<14} {state:<3} {check.detail}")
+        if check.evidence:
+            print(f"  evidence: {', '.join(check.evidence[:4])}")
+        if check.missing:
+            print(f"  missing: {', '.join(check.missing)}")
     if report.recommendations:
         print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:

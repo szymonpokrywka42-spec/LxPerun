@@ -39,6 +39,15 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("--root", output)
         self.assertIn("SELinux", output)
 
+    def test_help_compatibility_mentions_backward_support(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "compatibility"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("compatibility", output)
+        self.assertIn("backward", output.lower())
+
     def test_help_firewall_mentions_ruleset(self) -> None:
         buffer = io.StringIO()
         with patch.object(sys, "argv", ["lxperun", "help", "firewall"]), redirect_stdout(buffer):
