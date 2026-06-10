@@ -40,6 +40,7 @@ def capability_report(root: Path = Path("/")) -> CapabilityReport:
         _procfs_probe(proc),
         _sysfs_probe(sys),
         _kmsg_probe(dev, is_root),
+        _security_posture_probe(root, is_root),
         _perf_probe(proc, sys, is_root),
         _bpf_probe(sys, is_root),
         _audit_probe(is_root),
@@ -103,6 +104,25 @@ def _kmsg_probe(dev: Path, is_root: bool) -> CapabilityProbe:
         level="kernel-log",
         detail="Direct kernel log access.",
         evidence=_existing(path),
+        missing=tuple(missing),
+    )
+
+
+def _security_posture_probe(root: Path, is_root: bool) -> CapabilityProbe:
+    evidence = _existing(
+        root / "etc" / "passwd",
+        root / "sys" / "fs" / "selinux",
+        root / "sys" / "module" / "apparmor",
+    )
+    missing = []
+    if not is_root:
+        missing.append("root unlocks /etc/shadow, deeper file-permission and account checks")
+    return CapabilityProbe(
+        name="security-posture",
+        available=bool(evidence),
+        level="hardening",
+        detail="SELinux/AppArmor, exposed listeners, UID 0 accounts, and world-writable paths.",
+        evidence=evidence,
         missing=tuple(missing),
     )
 

@@ -63,7 +63,7 @@ def _ring3_layer(proc: Path, sys: Path, is_root: bool) -> AccessLayer:
         access="read-only system introspection through procfs/sysfs and libc/syscalls",
         evidence=evidence,
         missing=() if evidence else ("procfs/sysfs are not mounted or not visible",),
-        safe_next_steps=("collect processes from /proc/<pid>", "inspect open files and sockets visible to this user"),
+        safe_next_steps=("collect processes from /proc/<pid>", "inspect open files and sockets visible to this user", "audit posture with `lxperun security`"),
     )
 
 
@@ -86,7 +86,7 @@ def _ring0_layer(proc: Path, sys: Path, dev: Path, is_root: bool) -> AccessLayer
         access="kernel-exported state only; no arbitrary kernel memory access",
         evidence=evidence,
         missing=tuple(missing),
-        safe_next_steps=("use eBPF/perf/audit with explicit privileges", "optionally add a signed kernel module later"),
+        safe_next_steps=("use eBPF/perf/audit with explicit privileges", "optionally add a signed kernel module later", "check exposed services and hardening with `lxperun security`"),
     )
 
 

@@ -35,6 +35,7 @@ python -m lxperun.cli doctor --json
 python -m lxperun.cli rings
 python -m lxperun.cli capabilities
 python -m lxperun.cli network
+python -m lxperun.cli security
 python -m lxperun.cli processes
 python -m lxperun.cli services
 python -m lxperun.cli storage
@@ -92,6 +93,11 @@ EFI, TPM, fwupd, and debug symbols.
 ARP neighbors, conntrack entries, and interface bandwidth snapshots. Use
 `--watch` for a live refresh loop.
 
+`security` checks posture signals such as SELinux/AppArmor status, sockets
+bound to all interfaces, UID 0 accounts, passwordless shadow entries when run
+as root, and world-writable paths under `/etc`, `/opt`, and `/usr/local`.
+Add `--root` to unlock deeper checks.
+
 `processes` reads `/proc/<pid>` and shows processes, RSS memory, fd count,
 state, user, command line, and zombies.
 
@@ -122,9 +128,9 @@ python -m lxperun.cli report --format markdown --output lxperun-report.md --late
 python -m lxperun.cli report --format json --output lxperun-report.json
 ```
 
-`all` runs the current full report set: snapshot, capabilities, rings, doctor,
-network, processes, services, storage, hardware, trace, and crash. Use `--json`
-if you want full data for scripts.
+`all` runs the current full report set: snapshot, capabilities, security,
+rings, doctor, network, processes, services, storage, hardware, trace, and
+crash. Use `--json` if you want full data for scripts.
 
 Most commands work without root and will still show useful partial data. When a
 command can benefit from deeper privileges, LxPerun prints a tip telling you to

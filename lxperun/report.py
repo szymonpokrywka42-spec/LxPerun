@@ -12,6 +12,7 @@ from .linux import snapshot
 from .network import network_report
 from .processes import process_report
 from .rings import access_map
+from .security import security_report
 from .services import service_report
 from .storage import storage_report
 from .trace import trace_report
@@ -22,6 +23,7 @@ class PerunReport:
     generated_at: str
     snapshot: object
     capabilities: object
+    security: object
     rings: object
     doctor: object
     processes: object
@@ -42,6 +44,7 @@ def generate_report(project_root: Path | str = ".", limit: int = 12, include_lat
         generated_at=generated_at,
         snapshot=snapshot(),
         capabilities=capability_report(),
+        security=security_report(),
         rings=access_map(),
         doctor=diagnose(project_root),
         processes=process_report(),
@@ -62,6 +65,7 @@ def report_to_markdown(report: PerunReport, limit: int = 12) -> str:
     lines.append("")
     _add_snapshot_section(lines, report.snapshot)
     _add_capabilities_section(lines, report.capabilities)
+    _add_security_section(lines, report.security)
     _add_rings_section(lines, report.rings)
     _add_doctor_section(lines, report.doctor)
     _add_network_section(lines, report.network)
@@ -92,6 +96,19 @@ def _add_capabilities_section(lines: list[str], capabilities_report: object) -> 
         lines.append("- Tip: rerun with `--root` to unlock deeper kernel, TPM, and cleanup access.")
     for probe in capabilities_report.probes:
         lines.append(f"- `{probe.name}`: `{probe.available}` - {probe.detail}")
+    lines.append("")
+
+
+def _add_security_section(lines: list[str], security_report_obj: object) -> None:
+    lines.append("## Security")
+    lines.append(f"- Root: `{security_report_obj.is_root}`")
+    lines.append(f"- Effective UID: `{security_report_obj.effective_uid}`")
+    lines.append(f"- Signals: `{len(security_report_obj.signals)}`")
+    lines.append(f"- Findings: `{len(security_report_obj.findings)}`")
+    for finding in security_report_obj.findings[:10]:
+        lines.append(f"- `{finding.severity.upper()}` `{finding.category}`: {finding.message}")
+    for recommendation in security_report_obj.recommendations:
+        lines.append(f"- {recommendation}")
     lines.append("")
 
 
@@ -190,4 +207,3 @@ def _add_crash_section(lines: list[str], crash_report_obj: object) -> None:
         lines.extend(crash_report_obj.latest_info.splitlines())
         lines.append("```")
     lines.append("")
-

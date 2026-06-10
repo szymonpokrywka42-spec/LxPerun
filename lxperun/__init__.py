@@ -27,6 +27,7 @@ from .linux import (
     uptime_seconds,
 )
 from .rings import AccessLayer, AccessMap, access_map
+from .security import SecurityFinding, SecurityReport, SecuritySignal, security_report
 from .processes import ProcessInfo, ProcessReport, inspect_process, process_report, top_by_memory, zombie_processes
 from .services import ServiceReport, ServiceUnit, service_report
 from .storage import BlockIOStats, StorageDevice, StorageMount, StorageReport, storage_report
@@ -69,6 +70,9 @@ __all__ = [
     "UsbDevice",
     "HwmonSensor",
     "NumaNode",
+    "SecurityReport",
+    "SecuritySignal",
+    "SecurityFinding",
     "NetworkReport",
     "SocketEntry",
     "ArpEntry",
@@ -104,6 +108,7 @@ __all__ = [
     "system_identity",
     "uptime_seconds",
     "access_map",
+    "security_report",
     "capability_report",
     "clean",
     "inspect_process",

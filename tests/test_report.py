@@ -18,6 +18,13 @@ class ReportTest(unittest.TestCase):
                 effective_uid=1000,
                 probes=(SimpleNamespace(name="procfs", available=True, detail="proc",),),
             ),
+            security=SimpleNamespace(
+                is_root=False,
+                effective_uid=1000,
+                signals=(),
+                findings=(),
+                recommendations=(),
+            ),
             rings=SimpleNamespace(layers=(SimpleNamespace(ring="3", name="user space", available=True),)),
             doctor=SimpleNamespace(issues=()),
             processes=SimpleNamespace(
@@ -45,6 +52,7 @@ class ReportTest(unittest.TestCase):
             generated_at="2026-06-05T12:00:00+00:00",
             snapshot=SimpleNamespace(identity=SimpleNamespace(hostname="fedora", kernel="7.0", distribution="Fedora"), uptime=1.0, load_average=(0.1, 0.2, 0.3)),
             capabilities=SimpleNamespace(is_root=False, effective_uid=1000, probes=()),
+            security=SimpleNamespace(is_root=False, effective_uid=1000, signals=(), findings=(), recommendations=()),
             rings=SimpleNamespace(layers=()),
             doctor=SimpleNamespace(issues=()),
             processes=SimpleNamespace(total=0, unreadable=0, processes=()),

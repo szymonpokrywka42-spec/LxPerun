@@ -28,6 +28,16 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("network", output)
         self.assertIn("--watch", output)
 
+    def test_help_security_mentions_root_mode(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "security"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("security", output)
+        self.assertIn("--root", output)
+        self.assertIn("SELinux", output)
+
     def test_root_flag_reexecs_through_sudo(self) -> None:
         calls: list[list[str]] = []
 
