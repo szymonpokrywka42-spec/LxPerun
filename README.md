@@ -137,11 +137,14 @@ Use `--yes` if you want to skip that confirmation in automation scripts.
 
 `report` generates one coherent artifact in `markdown` or `json` and can write
 it to a file. This is the best option for bug reports and sharing results.
+Use `--format html` if you want a polished browser-friendly report with tables
+and a visual dashboard layout.
 
 Example:
 
 ```bash
 python -m lxperun.cli report --format markdown --output lxperun-report.md --latest
+python -m lxperun.cli report --format html --output lxperun-report.html --latest
 python -m lxperun.cli report --format json --output lxperun-report.json
 ```
 

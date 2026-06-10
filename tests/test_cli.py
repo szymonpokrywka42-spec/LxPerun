@@ -1,8 +1,10 @@
 import io
 import os
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -119,6 +121,21 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("clean", calls[0])
         self.assertIn("--apply", calls[0])
         self.assertNotIn("--root", calls[0])
+
+    def test_report_output_file_stays_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "report.html"
+            buffer = io.StringIO()
+            with (
+                patch.object(sys, "argv", ["lxperun", "report", "--format", "html", "--output", str(output_path)]),
+                patch("lxperun.cli.generate_report", return_value=SimpleNamespace(to_dict=lambda: {"ok": True})),
+                patch("lxperun.cli.report_to_html", return_value="<html>ok</html>"),
+                redirect_stdout(buffer),
+            ):
+                main()
+
+            self.assertEqual(buffer.getvalue(), "")
+            self.assertEqual(output_path.read_text(encoding="utf-8"), "<html>ok</html>")
 
     def test_render_hardware_uses_usb_fields_without_crashing(self) -> None:
         report = SimpleNamespace(

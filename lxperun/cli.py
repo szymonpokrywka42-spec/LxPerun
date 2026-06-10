@@ -22,7 +22,7 @@ from .network import group_sockets, network_report
 from .performance import performance_report
 from .repair import repair as repair_system
 from .processes import process_report, top_by_memory, zombie_processes
-from .report import generate_report, report_to_markdown
+from .report import generate_report, report_to_html, report_to_markdown
 from .rings import access_map
 from .security import security_report
 from .services import service_report
@@ -116,7 +116,7 @@ def main() -> None:
     repair_parser.add_argument("--project-root", default=".", help="scan this tree for Python syntax errors")
 
     report_parser = subparsers.add_parser("report", help="generate a unified LxPerun report")
-    report_parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="output format")
+    report_parser.add_argument("--format", choices=("markdown", "html", "json"), default="markdown", help="output format")
     report_parser.add_argument("--output", help="write the report to a file")
     report_parser.add_argument("--limit", type=int, default=12, help="number of top rows to include per section")
     report_parser.add_argument("--project-root", default=".", help="scan this tree for Python syntax errors")
@@ -185,7 +185,7 @@ def main() -> None:
     else:
         _print_snapshot(json_output=args.json, raw=args.raw, color_enabled=color_enabled)
 
-    if not args.json and not root_requested and os.geteuid() != 0 and command in _ROOT_SENSITIVE_COMMANDS:
+    if command != "report" and not args.json and not root_requested and os.geteuid() != 0 and command in _ROOT_SENSITIVE_COMMANDS:
         print()
         _print_root_tip(color_enabled)
 
@@ -495,7 +495,12 @@ def _list_item(text: str, color_enabled: bool) -> None:
 
 def _print_report(output_format: str, output: str | None, limit: int, project_root: str, latest: bool) -> None:
     report = generate_report(project_root=project_root, limit=limit, include_latest_crash=latest)
-    rendered = json.dumps(report.to_dict(), indent=2) if output_format == "json" else report_to_markdown(report, limit=limit)
+    if output_format == "json":
+        rendered = json.dumps(report.to_dict(), indent=2)
+    elif output_format == "html":
+        rendered = report_to_html(report, limit=limit)
+    else:
+        rendered = report_to_markdown(report, limit=limit)
     if output is None:
         print(rendered, end="" if rendered.endswith("\n") else "\n")
         return
