@@ -175,15 +175,29 @@ def _recommendations(
     slabinfo: tuple[SlabCache, ...],
 ) -> list[str]:
     recommendations = []
-    if any(sample.some_avg10 is not None and sample.some_avg10 > 0.1 for sample in pressure):
-        recommendations.append("CPU, memory, or IO pressure is visible; check for contention, swaps, or storage stalls.")
-    if interrupts:
+    if any(
+        (sample.some_avg10 is not None and sample.some_avg10 >= 0.50) or (sample.full_avg10 is not None and sample.full_avg10 >= 0.25)
+        for sample in pressure
+    ):
+        recommendations.append("PSI shows meaningful pressure; check for contention, swaps, or storage stalls.")
+    if _is_skewed(interrupts):
         recommendations.append(f"Interrupt load is concentrated on {interrupts[0].cpu}; consider irqbalance or affinity tuning.")
-    if softirqs:
+    if _is_skewed(softirqs):
         recommendations.append(f"Softirq load is concentrated on {softirqs[0].cpu}; inspect networking or storage softirq hotspots.")
-    if slabinfo:
-        recommendations.append(f"Top slab cache: {slabinfo[0].name}; watch kernel memory growth if it keeps climbing.")
+    if slabinfo and slabinfo[0].active_bytes >= 256 * 1024 * 1024:
+        recommendations.append(f"Top slab cache {slabinfo[0].name} is large; watch kernel memory growth if it keeps climbing.")
     return recommendations
+
+
+def _is_skewed(cpus: tuple[CpuLoad, ...]) -> bool:
+    if len(cpus) < 2:
+        return bool(cpus)
+    top = cpus[0].total
+    second = cpus[1].total
+    total = sum(cpu.total for cpu in cpus)
+    if total == 0:
+        return False
+    return top / total >= 0.55 and top >= second * 2.0
 
 
 def _read_lines(path: Path) -> tuple[str, ...]:

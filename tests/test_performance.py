@@ -52,6 +52,7 @@ class PerformanceTest(unittest.TestCase):
             self.assertEqual(len(report.pressure), 3)
             self.assertEqual(report.interrupts[0].cpu, "CPU1")
             self.assertEqual(report.slabinfo[0].name, "inode_cache")
+            self.assertFalse(report.recommendations)
 
 
 if __name__ == "__main__":

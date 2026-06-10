@@ -23,11 +23,12 @@ class ContainersTest(unittest.TestCase):
             for namespace_name in ("pid", "net", "mnt"):
                 (self_ns_dir / namespace_name).symlink_to(f"{namespace_name}:[4026532448]")
 
-            report = container_report(network_report_obj=SimpleNamespace(listening_sockets=()))
+            report = container_report(root=root, network_report_obj=SimpleNamespace(listening_sockets=()))
 
             signal_names = {signal.name for signal in report.signals}
             self.assertIn("container", signal_names)
             self.assertIn("namespaces", signal_names)
+            self.assertFalse(report.recommendations)
 
 
 if __name__ == "__main__":

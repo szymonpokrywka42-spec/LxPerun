@@ -32,7 +32,7 @@ def container_report(
     report = security_report(root=root, network_report_obj=network_report_obj)
     signals = tuple(signal for signal in report.signals if signal.name in {"root", "container", "namespaces"})
     findings = tuple(finding for finding in report.findings if finding.category == "container")
-    recommendations = list(report.recommendations)
+    recommendations = []
     if findings:
         recommendations.insert(0, "Review container cgroups, runtime sockets, and namespaces before assuming bare-metal isolation.")
     return ContainerReport(
