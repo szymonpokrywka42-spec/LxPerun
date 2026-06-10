@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from .capabilities import capability_report
@@ -408,7 +409,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "crash": ("Coredump analysis.", ["Checks whether tools are available and whether the system collects crash dumps."]),
         "clean": ("Disk cleanup.", ["Dry-runs by default; use `--apply` to remove old coredumps and clean caches."]),
         "repair": ("Safe repairs.", ["Runs cleanup, resets failed systemd units, and re-checks doctor output.", "Use `--apply` to execute the actions, `--yes` to skip the sensitive-fix prompt, and `--root` for system-level repairs."]),
-        "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown or JSON."]),
+        "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown, HTML, or JSON.", "Use `--output PATH` to choose where the report is written.", "If you choose `--format html` without `--output`, LxPerun writes the file to your desktop automatically."]),
         "all": ("Everything at once.", ["Combines snapshot, capabilities, security, containers, firewall, performance, rings, doctor, network, processes, services, storage, hardware, trace, and crash."]),
     }
     if topic:
@@ -438,6 +439,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  --no-color  disable ANSI colors")
     print("  --root      rerun the command through sudo for deeper access")
     print("  --project-root PATH  set the project root used by doctor/report/all")
+    print("  --output PATH  write the report to a file (used by report)")
     print()
     print("Examples:")
     print("  lxperun help hardware")
@@ -456,6 +458,8 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun --root clean --apply")
     print("  lxperun all --project-root ~/Pulpit/LxPerun")
     print("  lxperun all --limit 5")
+    print("  lxperun report --format html")
+    print("  lxperun report --format html --output ~/Desktop/lxperun-report.html")
 
 
 def _reexec_with_sudo() -> None:
@@ -502,11 +506,30 @@ def _print_report(output_format: str, output: str | None, limit: int, project_ro
     else:
         rendered = report_to_markdown(report, limit=limit)
     if output is None:
+        if output_format == "html":
+            output_path = _desktop_report_path()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(rendered, encoding="utf-8")
+            print(f"HTML report written to {output_path}")
+            return
         print(rendered, end="" if rendered.endswith("\n") else "\n")
         return
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")
+
+
+def _desktop_report_path() -> Path:
+    home = Path.home()
+    candidates = (
+        home / "Desktop",
+        home / "Pulpit",
+        home / "Pulpit" / "LxPerun",
+        home / "Desktop" / "LxPerun",
+    )
+    desktop_dir = next((path for path in candidates if path.is_dir()), home)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return desktop_dir / f"lxperun-report-{timestamp}.html"
 
 
 def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, color_enabled: bool) -> None:

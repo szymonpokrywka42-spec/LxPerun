@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from lxperun.cli import _print_banner, _render_doctor, _render_hardware, main
+from lxperun.cli import _print_banner, _print_report, _render_doctor, _render_hardware, main
 
 
 class CliHelpTest(unittest.TestCase):
@@ -68,6 +68,16 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("repair", output)
         self.assertIn("safe", output.lower())
         self.assertIn("--yes", output)
+
+    def test_help_report_mentions_html_and_output(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "report"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("markdown", output.lower())
+        self.assertIn("html", output.lower())
+        self.assertIn("--output", output)
 
     def test_help_firewall_mentions_ruleset(self) -> None:
         buffer = io.StringIO()
@@ -136,6 +146,27 @@ class CliHelpTest(unittest.TestCase):
 
             self.assertEqual(buffer.getvalue(), "")
             self.assertEqual(output_path.read_text(encoding="utf-8"), "<html>ok</html>")
+
+    def test_html_report_defaults_to_desktop_when_output_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            desktop = home / "Pulpit"
+            desktop.mkdir()
+            buffer = io.StringIO()
+
+            with (
+                patch("lxperun.cli.Path.home", return_value=home),
+                patch("lxperun.cli.generate_report", return_value=SimpleNamespace(to_dict=lambda: {"ok": True})),
+                patch("lxperun.cli.report_to_html", return_value="<html>desktop</html>"),
+                redirect_stdout(buffer),
+            ):
+                _print_report(output_format="html", output=None, limit=12, project_root=".", latest=False)
+
+            output = buffer.getvalue()
+            self.assertIn("HTML report written to", output)
+            files = list(desktop.glob("lxperun-report-*.html"))
+            self.assertEqual(len(files), 1)
+            self.assertEqual(files[0].read_text(encoding="utf-8"), "<html>desktop</html>")
 
     def test_render_hardware_uses_usb_fields_without_crashing(self) -> None:
         report = SimpleNamespace(

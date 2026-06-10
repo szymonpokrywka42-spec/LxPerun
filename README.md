@@ -139,6 +139,8 @@ Use `--yes` if you want to skip that confirmation in automation scripts.
 it to a file. This is the best option for bug reports and sharing results.
 Use `--format html` if you want a polished browser-friendly report with tables
 and a visual dashboard layout.
+If you omit `--output` for HTML, LxPerun saves the report to your desktop
+automatically.
 
 Example:
 
