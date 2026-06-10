@@ -146,15 +146,15 @@ The workflow in `.github/workflows/release.yml` builds distribution files for
 After publishing, users can:
 
 ```bash
-curl -LO https://github.com/<your-user>/<your-repo>/releases/download/v0.1.0/lxperun-0.1.0-py3-none-any.whl
-pip install ./lxperun-0.1.0-py3-none-any.whl
+curl -LO https://github.com/<your-user>/<your-repo>/releases/download/v0.1.1/lxperun-0.1.1-py3-none-any.whl
+pip install ./lxperun-0.1.1-py3-none-any.whl
 ```
 
 Or download the source tarball from the release and install locally:
 
 ```bash
-tar -xf lxperun-0.1.0.tar.gz
-cd lxperun-0.1.0
+tar -xf lxperun-0.1.1.tar.gz
+cd lxperun-0.1.1
 python -m pip install .
 ```
 

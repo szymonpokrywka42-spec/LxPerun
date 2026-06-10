@@ -1,5 +1,5 @@
 Name:           lxperun
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Friendly Linux diagnostics toolkit for developers and admins
 License:        GPL-3.0-or-later
@@ -27,4 +27,3 @@ processes, storage, hardware, trace readiness, and crash data.
 %files -n %{name} -f %{pyproject_files}
 %license LICENSE
 %doc README.md
-
