@@ -110,6 +110,7 @@ def main() -> None:
     repair_parser = subparsers.add_parser("repair", help="apply safe fixes for common issues")
     repair_parser.add_argument("--json", action="store_true", help="print raw JSON")
     repair_parser.add_argument("--apply", action="store_true", help="actually run repair commands")
+    repair_parser.add_argument("--yes", action="store_true", help="skip confirmation prompts for sensitive fixes")
     repair_parser.add_argument("--older-than-days", type=int, default=7, help="cleanup threshold for coredumps")
     repair_parser.add_argument("--project-root", default=".", help="scan this tree for Python syntax errors")
 
@@ -173,7 +174,7 @@ def main() -> None:
     elif command == "clean":
         _print_clean(json_output=args.json, apply=args.apply, older_than_days=args.older_than_days, color_enabled=color_enabled)
     elif command == "repair":
-        _print_repair(json_output=args.json, apply=args.apply, older_than_days=args.older_than_days, project_root=args.project_root, color_enabled=color_enabled)
+        _print_repair(json_output=args.json, apply=args.apply, yes=args.yes, older_than_days=args.older_than_days, project_root=args.project_root, color_enabled=color_enabled)
     elif command == "help":
         _print_help(topic=args.topic, color_enabled=color_enabled)
     elif command == "report":
@@ -378,8 +379,8 @@ def _print_clean(json_output: bool, apply: bool, older_than_days: int, color_ena
     _render_clean(report, color_enabled=color_enabled)
 
 
-def _print_repair(json_output: bool, apply: bool, older_than_days: int, project_root: str, color_enabled: bool) -> None:
-    report = repair_system(project_root=project_root, older_than_days=older_than_days, dry_run=not apply)
+def _print_repair(json_output: bool, apply: bool, yes: bool, older_than_days: int, project_root: str, color_enabled: bool) -> None:
+    report = repair_system(project_root=project_root, older_than_days=older_than_days, dry_run=not apply, yes=yes)
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
@@ -405,7 +406,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "trace": ("Debugging and tracing readiness.", ["Can only report readiness or run a command under `strace`/`perf`."]),
         "crash": ("Coredump analysis.", ["Checks whether tools are available and whether the system collects crash dumps."]),
         "clean": ("Disk cleanup.", ["Dry-runs by default; use `--apply` to remove old coredumps and clean caches."]),
-        "repair": ("Safe repairs.", ["Runs cleanup, resets failed systemd units, and re-checks doctor output.", "Use `--apply` to execute the actions, and `--root` for system-level repairs."]),
+        "repair": ("Safe repairs.", ["Runs cleanup, resets failed systemd units, and re-checks doctor output.", "Use `--apply` to execute the actions, `--yes` to skip the sensitive-fix prompt, and `--root` for system-level repairs."]),
         "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown or JSON."]),
         "all": ("Everything at once.", ["Combines snapshot, capabilities, security, containers, firewall, performance, rings, doctor, network, processes, services, storage, hardware, trace, and crash."]),
     }
@@ -449,6 +450,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun containers --root")
     print("  lxperun clean --apply")
     print("  lxperun repair --apply --root")
+    print("  lxperun repair --apply --yes --root")
     print("  lxperun --root clean --apply")
     print("  lxperun all --project-root ~/Pulpit/LxPerun")
     print("  lxperun all --limit 5")
@@ -948,9 +950,20 @@ def _render_repair(report, color_enabled: bool) -> None:
     _section_header("Repair", color_enabled, "Safe fixes for common issues detected by doctor.")
     mode = "apply" if not report.dry_run else "dry-run"
     print(f"Mode: {mode}")
+    print(f"Confirmation required: {'yes' if report.confirmation_required else 'no'}")
     print(f"Issues before: {report.issues_before_count}")
     print(f"Issues after:  {report.issues_after_count}")
     print()
+    if report.sensitive_issues:
+        print(dim("Sensitive issues", color_enabled))
+        for issue in report.sensitive_issues[:8]:
+            print(f"  {yellow(f'[{issue.severity.upper()}]', color_enabled)} {issue.source}: {issue.message}")
+    if report.manual_issues:
+        print(dim("Manual issues", color_enabled))
+        for issue in report.manual_issues[:8]:
+            print(f"  {red(f'[{issue.severity.upper()}]', color_enabled)} {issue.source}: {issue.message}")
+    if report.sensitive_issues or report.manual_issues:
+        print()
     _render_clean(report.clean_report, color_enabled=color_enabled)
     print()
     print(dim("Systemd reset", color_enabled))

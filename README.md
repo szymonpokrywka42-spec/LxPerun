@@ -129,6 +129,10 @@ actions, can reset failed systemd units, and then re-checks the system to show
 what changed. It is intentionally conservative and only touches things LxPerun
 can repair without guessing.
 
+When a repair includes a more sensitive fix, LxPerun will ask:
+`I'm gonna try to fix that. Are you sure you want this? [y/N]`
+Use `--yes` if you want to skip that confirmation in automation scripts.
+
 `report` generates one coherent artifact in `markdown` or `json` and can write
 it to a file. This is the best option for bug reports and sharing results.
 

@@ -56,6 +56,7 @@ class CliHelpTest(unittest.TestCase):
         output = buffer.getvalue()
         self.assertIn("repair", output)
         self.assertIn("safe", output.lower())
+        self.assertIn("--yes", output)
 
     def test_help_firewall_mentions_ruleset(self) -> None:
         buffer = io.StringIO()

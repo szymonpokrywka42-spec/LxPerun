@@ -63,6 +63,7 @@ class RepairTest(unittest.TestCase):
                 report = repair(
                     project_root=root,
                     dry_run=False,
+                    yes=True,
                     which_fn=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None,
                     run_command_fn=run_command_fn,
                     is_root_fn=lambda: 0,
@@ -72,6 +73,49 @@ class RepairTest(unittest.TestCase):
         self.assertEqual(report.issues_before_count, 1)
         self.assertEqual(report.issues_after_count, 0)
         self.assertEqual(calls[0], ["/usr/bin/systemctl", "reset-failed"])
+
+    def test_repair_apply_prompts_for_sensitive_fix(self) -> None:
+        clean_report = CleanReport(
+            dry_run=False,
+            actions=(),
+            total_reclaimed_bytes=0,
+            recommendations=(),
+        )
+        before = DoctorReport(
+            issues=(DiagnosticIssue(severity="error", source="systemd", message="Failed unit: demo.service"),)
+        )
+        calls: list[list[str]] = []
+
+        def run_command_fn(command: list[str], timeout: float) -> tuple[int, str, str]:
+            calls.append(command)
+            return 0, "reset", ""
+
+        prompts: list[str] = []
+
+        def input_fn(prompt: str) -> str:
+            prompts.append(prompt)
+            return "n"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with (
+                patch("lxperun.repair.clean", return_value=clean_report),
+                patch("lxperun.repair.diagnose", return_value=before),
+            ):
+                report = repair(
+                    project_root=root,
+                    dry_run=False,
+                    yes=False,
+                    which_fn=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None,
+                    run_command_fn=run_command_fn,
+                    is_root_fn=lambda: 0,
+                    input_fn=input_fn,
+                )
+
+        self.assertTrue(prompts)
+        self.assertIn("Are you sure", prompts[0])
+        self.assertEqual(report.reset_failed.state, "skipped")
+        self.assertFalse(calls)
 
 
 if __name__ == "__main__":
