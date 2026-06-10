@@ -57,6 +57,7 @@ class StorageTest(unittest.TestCase):
             self.assertEqual(report.mounts[0].total, 1000)
             self.assertEqual(report.devices[0].name, "sda")
             self.assertEqual(report.devices[0].model, "Disk Model")
+            self.assertFalse(report.devices[0].read_only)
             self.assertEqual(report.devices[0].io.reads_completed, 1)
             self.assertEqual(report.devices[0].io.writes_completed, 5)
 

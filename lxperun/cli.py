@@ -763,7 +763,7 @@ def _render_storage(report, limit: int, raw: bool, color_enabled: bool) -> None:
         print("Devices:")
         for device in report.devices[:limit]:
             rot = "rot" if device.rotational else "nonrot" if device.rotational is False else "-"
-            ro = "ro" if device.ro else "rw" if device.ro is False else "-"
+            ro = "ro" if device.read_only else "rw" if device.read_only is False else "-"
             print(f"  {device.name:<10} {format_bytes(device.size):<10} {ro:<2} {rot:<6} {device.vendor or ''} {device.model or ''}".rstrip())
 
 
