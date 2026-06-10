@@ -1,5 +1,3 @@
-"""Unified report generation for LxPerun."""
-
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -11,6 +9,7 @@ from .crash import crash_report
 from .doctor import diagnose
 from .hardware import hardware_report
 from .linux import snapshot
+from .network import network_report
 from .processes import process_report
 from .rings import access_map
 from .services import service_report
@@ -31,16 +30,13 @@ class PerunReport:
     hardware: object
     trace: object
     crash: object
+    network: object | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
-def generate_report(
-    project_root: Path | str = ".",
-    limit: int = 12,
-    include_latest_crash: bool = False,
-) -> PerunReport:
+def generate_report(project_root: Path | str = ".", limit: int = 12, include_latest_crash: bool = False) -> PerunReport:
     generated_at = datetime.now(timezone.utc).isoformat()
     return PerunReport(
         generated_at=generated_at,
@@ -54,6 +50,7 @@ def generate_report(
         hardware=hardware_report(),
         trace=trace_report(),
         crash=crash_report(limit=limit, include_latest=include_latest_crash),
+        network=network_report(),
     )
 
 
@@ -67,6 +64,7 @@ def report_to_markdown(report: PerunReport, limit: int = 12) -> str:
     _add_capabilities_section(lines, report.capabilities)
     _add_rings_section(lines, report.rings)
     _add_doctor_section(lines, report.doctor)
+    _add_network_section(lines, report.network)
     _add_processes_section(lines, report.processes, limit)
     _add_services_section(lines, report.services, limit)
     _add_storage_section(lines, report.storage, limit)
@@ -112,6 +110,18 @@ def _add_doctor_section(lines: list[str], doctor_report: object) -> None:
         return
     for issue in doctor_report.issues:
         lines.append(f"- `{issue.severity.upper()}` `{issue.source}`: {issue.message}")
+    lines.append("")
+
+
+def _add_network_section(lines: list[str], network_report_obj: object | None) -> None:
+    if network_report_obj is None:
+        return
+    lines.append("## Network")
+    lines.append(f"- Sockets: `{len(network_report_obj.sockets)}`")
+    lines.append(f"- Listening sockets: `{len(network_report_obj.listening_sockets)}`")
+    lines.append(f"- ARP entries: `{len(network_report_obj.arp)}`")
+    lines.append(f"- Conntrack entries: `{len(network_report_obj.conntrack)}`")
+    lines.append(f"- Interfaces sampled: `{len(network_report_obj.bandwidth.interfaces)}`")
     lines.append("")
 
 
@@ -180,3 +190,4 @@ def _add_crash_section(lines: list[str], crash_report_obj: object) -> None:
         lines.extend(crash_report_obj.latest_info.splitlines())
         lines.append("```")
     lines.append("")
+

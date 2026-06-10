@@ -19,6 +19,15 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("hardware", output)
         self.assertIn("--raw", output)
 
+    def test_help_network_mentions_watch_mode(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "network"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("network", output)
+        self.assertIn("--watch", output)
+
     def test_root_flag_reexecs_through_sudo(self) -> None:
         calls: list[list[str]] = []
 

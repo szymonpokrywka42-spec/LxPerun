@@ -31,6 +31,20 @@ from .processes import ProcessInfo, ProcessReport, inspect_process, process_repo
 from .services import ServiceReport, ServiceUnit, service_report
 from .storage import BlockIOStats, StorageDevice, StorageMount, StorageReport, storage_report
 from .hardware import HardwareReport, HwmonSensor, NumaNode, PciDevice, UsbDevice, hardware_report
+from .network import (
+    ArpEntry,
+    BandwidthSample,
+    BandwidthSnapshot,
+    ConntrackEntry,
+    NetworkReport,
+    SocketEntry,
+    arp_table,
+    conntrack_entries,
+    group_sockets,
+    network_bandwidth,
+    network_report,
+    socket_diag,
+)
 from .trace import TraceExecution, TraceReport, TraceTool, trace_command, trace_report
 from .crash import CrashReport, CrashTool, crash_report
 from .report import PerunReport, generate_report, report_to_markdown
@@ -55,6 +69,12 @@ __all__ = [
     "UsbDevice",
     "HwmonSensor",
     "NumaNode",
+    "NetworkReport",
+    "SocketEntry",
+    "ArpEntry",
+    "ConntrackEntry",
+    "BandwidthSnapshot",
+    "BandwidthSample",
     "TraceExecution",
     "TraceReport",
     "TraceTool",
@@ -93,6 +113,12 @@ __all__ = [
     "service_report",
     "storage_report",
     "hardware_report",
+    "network_report",
+    "socket_diag",
+    "arp_table",
+    "conntrack_entries",
+    "network_bandwidth",
+    "group_sockets",
     "trace_command",
     "trace_report",
     "crash_report",

@@ -34,6 +34,7 @@ python -m lxperun.cli doctor
 python -m lxperun.cli doctor --json
 python -m lxperun.cli rings
 python -m lxperun.cli capabilities
+python -m lxperun.cli network
 python -m lxperun.cli processes
 python -m lxperun.cli services
 python -m lxperun.cli storage
@@ -87,6 +88,10 @@ bypass kernel, hypervisor, UEFI, Intel ME, or AMD PSP isolation.
 permissions: procfs, sysfs, `/dev/kmsg`, perf, eBPF, audit, systemd, journal,
 EFI, TPM, fwupd, and debug symbols.
 
+`network` reads `/proc/net/*` and shows listening sockets, per-PID ownership,
+ARP neighbors, conntrack entries, and interface bandwidth snapshots. Use
+`--watch` for a live refresh loop.
+
 `processes` reads `/proc/<pid>` and shows processes, RSS memory, fd count,
 state, user, command line, and zombies.
 
@@ -118,8 +123,8 @@ python -m lxperun.cli report --format json --output lxperun-report.json
 ```
 
 `all` runs the current full report set: snapshot, capabilities, rings, doctor,
-processes, services, storage, hardware, trace, and crash. Use `--json` if you
-want full data for scripts.
+network, processes, services, storage, hardware, trace, and crash. Use `--json`
+if you want full data for scripts.
 
 Most commands work without root and will still show useful partial data. When a
 command can benefit from deeper privileges, LxPerun prints a tip telling you to

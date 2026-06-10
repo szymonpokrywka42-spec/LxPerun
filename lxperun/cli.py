@@ -1,5 +1,3 @@
-"""Command line interface for LxPerun Linux helpers."""
-
 from __future__ import annotations
 
 import argparse
@@ -7,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .capabilities import capability_report
@@ -16,6 +15,7 @@ from .doctor import diagnose
 from .formatting import human_bytes, human_sensor_value, human_uptime
 from .hardware import hardware_report
 from .linux import format_bytes, snapshot
+from .network import group_sockets, network_report
 from .processes import process_report, top_by_memory, zombie_processes
 from .report import generate_report, report_to_markdown
 from .rings import access_map
@@ -23,6 +23,9 @@ from .services import service_report
 from .storage import storage_report
 from .trace import trace_command, trace_report
 from .ui import bold, cyan, dim, green, red, supports_color, yellow
+
+
+_ROOT_SENSITIVE_COMMANDS = {"doctor", "rings", "capabilities", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "report", "all", "network"}
 
 
 def main() -> None:
@@ -45,6 +48,11 @@ def main() -> None:
 
     capabilities_parser = subparsers.add_parser("capabilities", help="show diagnostic capabilities")
     capabilities_parser.add_argument("--json", action="store_true", help="print raw JSON")
+
+    network_parser = subparsers.add_parser("network", help="show network diagnostics")
+    network_parser.add_argument("--json", action="store_true", help="print raw JSON")
+    network_parser.add_argument("--watch", action="store_true", help="refresh the view until interrupted")
+    network_parser.add_argument("--interval", type=float, default=2.0, help="seconds between refreshes in watch mode")
 
     processes_parser = subparsers.add_parser("processes", help="show process diagnostics")
     processes_parser.add_argument("--json", action="store_true", help="print raw JSON")
@@ -75,12 +83,7 @@ def main() -> None:
     clean_parser = subparsers.add_parser("clean", help="reclaim disk space from caches and coredumps")
     clean_parser.add_argument("--json", action="store_true", help="print raw JSON")
     clean_parser.add_argument("--apply", action="store_true", help="actually run cleanup commands")
-    clean_parser.add_argument(
-        "--older-than-days",
-        type=int,
-        default=7,
-        help="remove only coredumps older than this many days",
-    )
+    clean_parser.add_argument("--older-than-days", type=int, default=7, help="remove only coredumps older than this many days")
 
     report_parser = subparsers.add_parser("report", help="generate a unified LxPerun report")
     report_parser.add_argument("--format", choices=("markdown", "json"), default="markdown", help="output format")
@@ -115,6 +118,8 @@ def main() -> None:
         _print_rings(json_output=args.json, color_enabled=color_enabled)
     elif command == "capabilities":
         _print_capabilities(json_output=args.json, color_enabled=color_enabled)
+    elif command == "network":
+        _print_network(json_output=args.json, watch=args.watch, interval=args.interval, color_enabled=color_enabled)
     elif command == "processes":
         _print_processes(json_output=args.json, limit=args.limit, raw=args.raw, color_enabled=color_enabled)
     elif command == "services":
@@ -128,22 +133,11 @@ def main() -> None:
     elif command == "crash":
         _print_crash(json_output=args.json, limit=args.limit, latest=args.latest, color_enabled=color_enabled)
     elif command == "clean":
-        _print_clean(
-            json_output=args.json,
-            apply=args.apply,
-            older_than_days=args.older_than_days,
-            color_enabled=color_enabled,
-        )
+        _print_clean(json_output=args.json, apply=args.apply, older_than_days=args.older_than_days, color_enabled=color_enabled)
     elif command == "help":
         _print_help(topic=args.topic, color_enabled=color_enabled)
     elif command == "report":
-        _print_report(
-            output_format=args.format,
-            output=args.output,
-            limit=args.limit,
-            project_root=args.project_root,
-            latest=args.latest,
-        )
+        _print_report(output_format=args.format, output=args.output, limit=args.limit, project_root=args.project_root, latest=args.latest)
     elif command == "all":
         _print_all(json_output=args.json, limit=args.limit, project_root=args.project_root, raw=args.raw, color_enabled=color_enabled)
     else:
@@ -159,7 +153,6 @@ def _print_snapshot(json_output: bool, raw: bool, color_enabled: bool) -> None:
     if json_output:
         print(json.dumps(info.to_dict(), indent=2))
         return
-
     print(cyan("System", color_enabled))
     print(f"Host:      {info.identity.hostname}")
     print(f"Kernel:    {info.identity.kernel} ({info.identity.machine})")
@@ -172,21 +165,8 @@ def _print_snapshot(json_output: bool, raw: bool, color_enabled: bool) -> None:
     print(f"Uptime:    {uptime_text}")
     print(f"Load:      {info.load_average[0]:.2f} {info.load_average[1]:.2f} {info.load_average[2]:.2f}")
     print(f"CPU:       {info.cpu_info.model_name or info.cpu_info.architecture} ({info.cpu_info.logical_cpus} threads)")
-    print(
-        "Memory:    "
-        f"{format_bytes(info.memory.used)} / {format_bytes(info.memory.total)} "
-        f"({info.memory.used_percent:.2f}%)"
-    )
-    print(
-        "Disk /:    "
-        f"{format_bytes(info.root_disk.used)} / {format_bytes(info.root_disk.total)} "
-        f"({info.root_disk.used_percent:.2f}%)"
-    )
-    print(dim("Block:", color_enabled))
-    for device in info.block_devices:
-        size = "unknown" if device.size is None else format_bytes(device.size)
-        kind = "hdd" if device.rotational else "ssd/nvme" if device.rotational is False else "unknown"
-        print(f"  {device.name:<10} {size:<10} {kind:<8} {device.vendor or ''} {device.model or ''}".rstrip())
+    print(f"Memory:    {format_bytes(info.memory.used)} / {format_bytes(info.memory.total)} ({info.memory.used_percent:.2f}%)")
+    print(f"Disk /:    {format_bytes(info.root_disk.used)} / {format_bytes(info.root_disk.total)} ({info.root_disk.used_percent:.2f}%)")
     print(dim("Network:", color_enabled))
     for interface in info.network:
         state = interface.operstate or "unknown"
@@ -203,7 +183,6 @@ def _print_doctor(json_output: bool, project_root: str, color_enabled: bool) -> 
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_doctor(report, color_enabled=color_enabled)
 
 
@@ -212,7 +191,6 @@ def _print_rings(json_output: bool, color_enabled: bool) -> None:
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_rings(report, color_enabled=color_enabled)
 
 
@@ -221,8 +199,32 @@ def _print_capabilities(json_output: bool, color_enabled: bool) -> None:
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_capabilities(report, color_enabled=color_enabled)
+
+
+def _print_network(json_output: bool, watch: bool, interval: float, color_enabled: bool) -> None:
+    if watch and json_output:
+        watch = False
+    if watch:
+        previous_bandwidth = None
+        try:
+            while True:
+                report = network_report(previous_bandwidth=previous_bandwidth)
+                previous_bandwidth = report.bandwidth
+                if os.name == "nt":
+                    os.system("cls")
+                else:
+                    os.system("clear")
+                _render_network(report, color_enabled=color_enabled)
+                time.sleep(max(interval, 0.25))
+        except KeyboardInterrupt:
+            print()
+            return
+    report = network_report()
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_network(report, color_enabled=color_enabled)
 
 
 def _print_processes(json_output: bool, limit: int, raw: bool, color_enabled: bool) -> None:
@@ -230,7 +232,6 @@ def _print_processes(json_output: bool, limit: int, raw: bool, color_enabled: bo
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_processes(report, limit, raw=raw, color_enabled=color_enabled)
 
 
@@ -239,7 +240,6 @@ def _print_services(json_output: bool, limit: int, color_enabled: bool) -> None:
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_services(report, limit, color_enabled=color_enabled)
 
 
@@ -248,7 +248,6 @@ def _print_storage(json_output: bool, limit: int, raw: bool, color_enabled: bool
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_storage(report, limit, raw=raw, color_enabled=color_enabled)
 
 
@@ -257,9 +256,7 @@ def _print_hardware(json_output: bool, limit: int, raw: bool, color_enabled: boo
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-
     _render_hardware(report, limit, raw=raw, color_enabled=color_enabled)
-
 
 
 def _print_trace(json_output: bool, mode: str, command: list[str], color_enabled: bool) -> None:
@@ -267,7 +264,6 @@ def _print_trace(json_output: bool, mode: str, command: list[str], color_enabled
         command = command[1:]
     if command and mode == "report":
         mode = "strace"
-
     if not command:
         report = trace_report()
         if json_output:
@@ -275,13 +271,11 @@ def _print_trace(json_output: bool, mode: str, command: list[str], color_enabled
             return
         _render_trace_report(report, color_enabled=color_enabled)
         return
-
     execution = trace_command(command, mode=mode)
     if json_output:
         print(json.dumps(execution.to_dict(), indent=2))
         return
     _render_trace_execution(execution, color_enabled=color_enabled)
-
 
 
 def _print_crash(json_output: bool, limit: int, latest: bool, color_enabled: bool) -> None:
@@ -306,6 +300,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "doctor": ("System problem diagnostics.", ["Scans kernel, systemd, logs, and Python syntax errors.", "A good first step when you are chasing a root cause."]),
         "rings": ("Access layers from user space to firmware.", ["Shows what LxPerun can see without root and where the limits are."]),
         "capabilities": ("What LxPerun can currently inspect.", ["Audits access to procfs, sysfs, journal, perf, BPF, and TPM."]),
+        "network": ("Socket, ARP, conntrack, and bandwidth diagnostics.", ["Shows listening ports, per-PID sockets, ARP entries, conntrack, and rx/tx samples.", "Add `--watch` to refresh the view live."]),
         "processes": ("Process analysis.", ["Top processes by memory, zombies, fd count, command line, and state."]),
         "services": ("systemd service state.", ["Failed units, activity, and basic unit health."]),
         "storage": ("Disks, mounts, and I/O.", ["Shows usage, device types, and basic block attributes."]),
@@ -314,9 +309,8 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "crash": ("Coredump analysis.", ["Checks whether tools are available and whether the system collects crash dumps."]),
         "clean": ("Disk cleanup.", ["Dry-runs by default; use `--apply` to remove old coredumps and clean caches."]),
         "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown or JSON."]),
-        "all": ("Everything at once.", ["Combines snapshot, capabilities, rings, doctor, processes, services, storage, hardware, trace, and crash."]),
+        "all": ("Everything at once.", ["Combines snapshot, capabilities, rings, doctor, network, processes, services, storage, hardware, trace, and crash."]),
     }
-
     if topic:
         entry = guides.get(topic)
         if entry is None:
@@ -331,12 +325,11 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         for line in lines:
             print(f"- {line}")
         return
-
     print(bold(cyan("LxPerun help", color_enabled), color_enabled))
     print("LxPerun is a simple Linux diagnostics tool — no unnecessary noise.")
     print()
     print("Key commands:")
-    for name in ("snapshot", "doctor", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
+    for name in ("snapshot", "doctor", "network", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
         summary, _ = guides[name]
         print(f"  {name:<12} {summary}")
     print()
@@ -356,32 +349,9 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun all --limit 5")
 
 
-_ROOT_SENSITIVE_COMMANDS = {
-    "doctor",
-    "rings",
-    "capabilities",
-    "processes",
-    "services",
-    "storage",
-    "hardware",
-    "trace",
-    "crash",
-    "clean",
-    "report",
-    "all",
-}
-
-
 def _reexec_with_sudo() -> None:
     argv = [arg for arg in sys.argv[1:] if arg != "--root"]
-    command = [
-        "sudo",
-        "-E",
-        sys.executable,
-        "-m",
-        "lxperun.cli",
-        *argv,
-    ]
+    command = ["sudo", "-E", sys.executable, "-m", "lxperun.cli", *argv]
     raise SystemExit(subprocess.call(command))
 
 
@@ -389,22 +359,15 @@ def _print_root_tip(color_enabled: bool) -> None:
     print(dim("Tip: add `--root` to rerun this command with sudo and unlock deeper diagnostics.", color_enabled))
 
 
-
 def _print_report(output_format: str, output: str | None, limit: int, project_root: str, latest: bool) -> None:
     report = generate_report(project_root=project_root, limit=limit, include_latest_crash=latest)
-    if output_format == "json":
-        rendered = json.dumps(report.to_dict(), indent=2)
-    else:
-        rendered = report_to_markdown(report, limit=limit)
-
+    rendered = json.dumps(report.to_dict(), indent=2) if output_format == "json" else report_to_markdown(report, limit=limit)
     if output is None:
         print(rendered, end="" if rendered.endswith("\n") else "\n")
         return
-
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")
-
 
 
 def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, color_enabled: bool) -> None:
@@ -412,33 +375,16 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     capabilities = capability_report()
     rings = access_map()
     doctor = diagnose(project_root)
+    network = network_report()
     processes = process_report()
     services = service_report()
     storage = storage_report()
     hardware = hardware_report()
     trace = trace_report()
     crash = crash_report()
-
     if json_output:
-        print(
-            json.dumps(
-                {
-                    "snapshot": info.to_dict(),
-                    "capabilities": capabilities.to_dict(),
-                    "rings": rings.to_dict(),
-                    "doctor": doctor.to_dict(),
-                    "processes": processes.to_dict(),
-                    "services": services.to_dict(),
-                    "storage": storage.to_dict(),
-                    "hardware": hardware.to_dict(),
-                    "trace": trace.to_dict(),
-                    "crash": crash.to_dict(),
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
         return
-
     _render_snapshot(info, raw=raw, color_enabled=color_enabled)
     print()
     _render_capabilities(capabilities, color_enabled=color_enabled)
@@ -446,6 +392,8 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     _render_rings(rings, color_enabled=color_enabled)
     print()
     _render_doctor(doctor, color_enabled=color_enabled)
+    print()
+    _render_network(network, color_enabled=color_enabled)
     print()
     _render_processes(processes, limit, raw=raw, color_enabled=color_enabled)
     print()
@@ -460,53 +408,11 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     _render_crash(crash, color_enabled=color_enabled)
 
 
-
-def _render_snapshot(info, raw: bool, color_enabled: bool) -> None:
-    print(bold(cyan("System", color_enabled), color_enabled))
-    print(f"Host:      {info.identity.hostname}")
-    print(f"Kernel:    {info.identity.kernel} ({info.identity.machine})")
-    print(f"Distro:    {info.identity.distribution}")
-    if info.identity.product_vendor or info.identity.product_name:
-        vendor = info.identity.product_vendor or "unknown vendor"
-        product = info.identity.product_name or "unknown product"
-        print(f"Machine:   {vendor} {product}")
-    uptime_text = f"{info.uptime / 3600:.1f} h" if raw else human_uptime(info.uptime)
-    print(f"Uptime:    {uptime_text}")
-    print(f"Load:      {info.load_average[0]:.2f} {info.load_average[1]:.2f} {info.load_average[2]:.2f}")
-    print(f"CPU:       {info.cpu_info.model_name or info.cpu_info.architecture} ({info.cpu_info.logical_cpus} threads)")
-    print(
-        "Memory:    "
-        f"{format_bytes(info.memory.used)} / {format_bytes(info.memory.total)} "
-        f"({info.memory.used_percent:.2f}%)"
-    )
-    print(
-        "Disk /:    "
-        f"{format_bytes(info.root_disk.used)} / {format_bytes(info.root_disk.total)} "
-        f"({info.root_disk.used_percent:.2f}%)"
-    )
-    print(dim("Block:", color_enabled))
-    for device in info.block_devices:
-        size = "unknown" if device.size is None else format_bytes(device.size)
-        kind = "hdd" if device.rotational else "ssd/nvme" if device.rotational is False else "unknown"
-        print(f"  {device.name:<10} {size:<10} {kind:<8} {device.vendor or ''} {device.model or ''}".rstrip())
-    print(dim("Network:", color_enabled))
-    for interface in info.network:
-        state = interface.operstate or "unknown"
-        ipv4 = interface.ipv4 or "-"
-        rx = format_bytes(interface.rx_bytes or 0)
-        tx = format_bytes(interface.tx_bytes or 0)
-        print(f"  {interface.name:<12} {state:<8} ip={ipv4:<15} rx={rx:<10} tx={tx:<10}")
-    print(f"Mounts:    {len(info.mounts)}")
-    print(f"Modules:   {len(info.kernel_modules)}")
-
-
-
 def _render_doctor(report, color_enabled: bool) -> None:
     print(bold(cyan("Doctor", color_enabled), color_enabled))
     if not report.issues:
         print(green("LxPerun doctor: no issues found.", color_enabled))
         return
-
     print(yellow(f"LxPerun doctor: {len(report.issues)} issue(s) found.", color_enabled))
     for issue in report.issues:
         severity_style = green if issue.severity in {"info", "ok"} else yellow if issue.severity == "warning" else red
@@ -515,7 +421,6 @@ def _render_doctor(report, color_enabled: bool) -> None:
             print(f"  {issue.detail}")
         if issue.suggestion:
             print(f"  suggestion: {issue.suggestion}")
-
 
 
 def _render_rings(report, color_enabled: bool) -> None:
@@ -534,7 +439,6 @@ def _render_rings(report, color_enabled: bool) -> None:
             print(f"  next: {', '.join(layer.safe_next_steps)}")
 
 
-
 def _render_capabilities(report, color_enabled: bool) -> None:
     root_text = "yes" if report.is_root else "no"
     print(bold(cyan("Capabilities", color_enabled), color_enabled))
@@ -548,105 +452,96 @@ def _render_capabilities(report, color_enabled: bool) -> None:
             print(f"  missing: {', '.join(probe.missing)}")
 
 
+def _render_network(report, color_enabled: bool) -> None:
+    print(bold(cyan("Network", color_enabled), color_enabled))
+    print(f"Sockets: {len(report.sockets)} listening={len(report.listening_sockets)} arp={len(report.arp)} conntrack={len(report.conntrack)}")
+    print(f"Bandwidth sample time: {report.bandwidth.timestamp:.0f}")
+    for sample in report.bandwidth.interfaces[:12]:
+        rx = format_bytes(sample.rx_bytes)
+        tx = format_bytes(sample.tx_bytes)
+        rx_rate = f"{format_bytes(sample.rx_rate_bps)}/s" if sample.rx_rate_bps is not None else "-"
+        tx_rate = f"{format_bytes(sample.tx_rate_bps)}/s" if sample.tx_rate_bps is not None else "-"
+        print(f"  {sample.name:<12} rx={rx:<10} tx={tx:<10} rate={rx_rate:<14} {tx_rate}")
+
+    grouped = group_sockets(report.sockets)
+    if grouped["listening"]:
+        print("Listening sockets:")
+        for socket_entry in grouped["listening"][:12]:
+            pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
+            print(f"  {socket_entry.protocol:<5} {socket_entry.local_address}:{socket_entry.local_port:<5} pid={pid_text} inode={socket_entry.inode}")
+    if grouped["established"]:
+        print("Established sockets:")
+        for socket_entry in grouped["established"][:12]:
+            pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
+            print(f"  {socket_entry.protocol:<5} {socket_entry.local_address}:{socket_entry.local_port:<5} -> {socket_entry.remote_address}:{socket_entry.remote_port:<5} pid={pid_text}")
+    if grouped["unix"]:
+        print("Unix sockets:")
+        for socket_entry in grouped["unix"][:12]:
+            pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
+            print(f"  {socket_entry.state:<10} {socket_entry.path or socket_entry.local_address} pid={pid_text}")
+    if grouped["other"]:
+        print("Other sockets:")
+        for socket_entry in grouped["other"][:12]:
+            pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
+            endpoint = f"{socket_entry.local_address}:{socket_entry.local_port}"
+            if socket_entry.remote_address or socket_entry.remote_port:
+                endpoint += f" -> {socket_entry.remote_address}:{socket_entry.remote_port}"
+            print(f"  {socket_entry.protocol:<5} {endpoint:<36} state={socket_entry.state:<10} pid={pid_text}")
+
 
 def _render_processes(report, limit: int, raw: bool, color_enabled: bool) -> None:
-    zombies = zombie_processes(report)
     print(bold(cyan("Processes", color_enabled), color_enabled))
-    print(f"Total: {report.total} processes, unreadable: {report.unreadable}, zombies: {len(zombies)}")
-    print(f"{'PID':>7} {'USER':<12} {'RSS':>10} {'FD':>5} {'STATE':<14} COMMAND")
+    print(f"Total: {report.total} processes, unreadable: {report.unreadable}, zombies: {len(zombie_processes(report))}")
+    print(f"    PID USER                RSS    FD STATE          COMMAND")
     for process in top_by_memory(report, limit):
         command = " ".join(process.cmdline) if process.cmdline else process.name or "-"
-        if len(command) > 90:
-            command = command[:87] + "..."
-        rss = "-" if process.vm_rss is None else (str(process.vm_rss) if raw else human_bytes(process.vm_rss))
-        fd_count = "-" if process.fd_count is None else str(process.fd_count)
-        state = process.state or "-"
-        user = process.user or "-"
-        print(f"{process.pid:>7} {user:<12.12} {rss:>10} {fd_count:>5} {state:<14.14} {command}")
-
+        if len(command) > 80:
+            command = command[:77] + "..."
+        print(f"{process.pid:>6} { (process.user or '-'): <16} {human_bytes(process.vm_rss):>10} {process.fd_count:>5} {process.state:<13} {command}")
 
 
 def _render_services(report, limit: int, color_enabled: bool) -> None:
     print(bold(cyan("Services", color_enabled), color_enabled))
-    print(
-        f"Available: {report.available} total={report.total_units} "
-        f"active={report.active_units} running={report.running_units} failed={report.failed_count}"
-    )
-    if report.raw_failed_units:
-        print("Failed units:")
-        for name in report.raw_failed_units[:limit]:
-            print(f"  {name}")
-        return
+    print(f"Available: {report.available} total={report.total_units} active={report.active_units} running={report.running_units} failed={report.failed_count}")
     if report.failed_units:
         print("Failed units:")
         for unit in report.failed_units[:limit]:
-            print(f"  {unit.name} ({unit.active}/{unit.sub}) - {unit.description}")
-        return
-    print("Failed units: none")
-
+            print(f"  {unit.name}")
 
 
 def _render_storage(report, limit: int, raw: bool, color_enabled: bool) -> None:
     print(bold(cyan("Storage", color_enabled), color_enabled))
     print(f"Mounts: {report.mount_count} Devices: {report.device_count}")
-    print(f"{'MOUNT':<18} {'FS':<10} {'USED':>10} {'TOTAL':>10} {'%':>6} DEVICE")
+    print(f"{'MOUNT':<18} {'FS':<12} {'USED':>10} {'TOTAL':>10} {'%':>6} DEVICE")
     for mount in report.mounts[:limit]:
-        used_text = f"{mount.used} B" if raw else human_bytes(mount.used)
-        total_text = f"{mount.total} B" if raw else human_bytes(mount.total)
-        print(
-            f"{mount.mount_point:<18.18} {mount.filesystem:<10.10} "
-            f"{used_text:>10} {total_text:>10} "
-            f"{mount.used_percent:>5.1f}% {mount.device}"
-        )
-    if not report.devices:
-        return
-    print(dim("Devices:", color_enabled))
-    for device in report.devices[:limit]:
-        size = "unknown" if device.size is None else (str(device.size) if raw else human_bytes(device.size))
-        read_write = "ro" if device.read_only else "rw"
-        rotation = "rot" if device.rotational else "nonrot" if device.rotational is False else "unk"
-        io = ""
-        if device.io is not None:
-            io = f" r={device.io.reads_completed} w={device.io.writes_completed}" if raw else ""
-        print(
-            f"  {device.name:<10} {size:<10} {read_write:<2} {rotation:<6} "
-            f"{device.vendor or ''} {device.model or ''}{io}"
-        )
-
+        print(f"{mount.mount_point:<18} {mount.filesystem:<12} {format_bytes(mount.used):>10} {format_bytes(mount.total):>10} {mount.used_percent:>5.1f}% {mount.device}")
+    if report.devices:
+        print("Devices:")
+        for device in report.devices[:limit]:
+            rot = "rot" if device.rotational else "nonrot" if device.rotational is False else "-"
+            ro = "ro" if device.ro else "rw" if device.ro is False else "-"
+            print(f"  {device.name:<10} {format_bytes(device.size):<10} {ro:<2} {rot:<6} {device.vendor or ''} {device.model or ''}".rstrip())
 
 
 def _render_hardware(report, limit: int, raw: bool, color_enabled: bool) -> None:
     print(bold(cyan("Hardware", color_enabled), color_enabled))
     print(f"PCI: {report.pci_count} USB: {report.usb_count} Sensors: {report.sensor_count} NUMA nodes: {report.numa_count}")
     if report.pci_devices:
-        print(dim("PCI:", color_enabled))
+        print("PCI:")
         for device in report.pci_devices[:limit]:
-            print(
-                f"  {device.bdf:<12} {device.vendor_id or '-'}:{device.device_id or '-'} "
-                f"class={device.class_code or '-'} driver={device.driver or '-'} "
-                f"{device.vendor_name or ''} {device.device_name or ''}".rstrip()
-            )
+            print(f"  {device.bdf} {device.vendor_id or '-'}:{device.device_id or '-'} class={device.class_code or '-'} driver={device.driver or '-'}")
     if report.usb_devices:
-        print(dim("USB:", color_enabled))
+        print("USB:")
         for device in report.usb_devices[:limit]:
-            print(
-                f"  {device.path:<12} {device.id_vendor or '-'}:{device.id_product or '-'} "
-                f"bus={device.busnum or '-'} dev={device.devnum or '-'} "
-                f"{device.manufacturer or ''} {device.product or ''} {device.serial or ''}".rstrip()
-            )
+            print(f"  {device.bus_id:<12} {device.vendor_id or '-'}:{device.product_id or '-'} {device.manufacturer or ''} {device.product or ''}".rstrip())
     if report.sensors:
-        print(dim("Sensors:", color_enabled))
+        print("Sensors:")
         for sensor in report.sensors[:limit]:
-            value_text = f"{sensor.value} {sensor.unit}" if raw else human_sensor_value(sensor.value, sensor.unit)
-            print(f"  {sensor.chip:<16} {sensor.label:<18} {value_text}")
+            print(f"  {sensor.chip:<16} {sensor.label:<18} {human_sensor_value(sensor.value, sensor.unit)}")
     if report.numa_nodes:
-        print(dim("NUMA:", color_enabled))
+        print("NUMA:")
         for node in report.numa_nodes[:limit]:
-            print(
-                f"  {node.name:<8} cpus={node.cpulist or '-'} "
-                f"mem_total_kb={node.mem_total_kb or '-'} mem_free_kb={node.mem_free_kb or '-'}"
-            )
-
+            print(f"  {node.name:<8} cpus={node.cpu_list or '-'} mem_total_kb={node.mem_total_kb or '-'} mem_free_kb={node.mem_free_kb or '-'}")
 
 
 def _render_trace_report(report, color_enabled: bool) -> None:
@@ -665,74 +560,46 @@ def _render_trace_report(report, color_enabled: bool) -> None:
             print(f"  {recommendation}")
 
 
-
 def _render_trace_execution(execution, color_enabled: bool) -> None:
-    command_text = " ".join(execution.command)
-    print(bold(cyan("Trace", color_enabled), color_enabled))
-    print(f"Mode: {execution.mode} Exit: {execution.exit_code}")
-    print(f"Command: {command_text}")
-    if execution.stdout:
-        print("Stdout:")
-        print(execution.stdout)
-    if execution.stderr:
-        print("Stderr:")
-        print(execution.stderr)
+    print(bold(cyan("Trace execution", color_enabled), color_enabled))
+    print(f"Mode: {execution.mode} exit={execution.exit_code}")
+    print(f"Command: {' '.join(execution.command)}")
+    if execution.trace_file:
+        print(f"Trace file: {execution.trace_file}")
     if execution.trace_lines:
-        print("Trace:")
-        for line in execution.trace_lines[:40]:
+        print("Trace lines:")
+        for line in execution.trace_lines[:20]:
             print(f"  {line}")
-
 
 
 def _render_crash(report, color_enabled: bool) -> None:
     print(bold(cyan("Crash", color_enabled), color_enabled))
     print(f"Ready: {report.ready} coredumps={report.coredump_count}")
-    for tool in report.tools:
-        status = "yes" if tool.available else "no"
-        print(f"{tool.name:<12} {status:<3} {tool.detail}")
-        if tool.evidence:
-            print(f"  evidence: {', '.join(tool.evidence[:4])}")
-        if tool.missing:
-            print(f"  missing: {', '.join(tool.missing)}")
-    if report.debug_symbol_paths:
-        print("Debug symbols:")
-        for path in report.debug_symbol_paths[:4]:
-            print(f"  {path}")
     if report.coredump_summaries:
         print("Coredumps:")
         for line in report.coredump_summaries[:8]:
             print(f"  {line}")
     if report.latest_info:
         print("Latest:")
-        for line in report.latest_info.splitlines()[:40]:
-            print(f"  {line}")
+        print(report.latest_info)
     if report.recommendations:
         print("Recommendations:")
         for recommendation in report.recommendations:
             print(f"  {recommendation}")
 
 
-
 def _render_clean(report, color_enabled: bool) -> None:
     print(bold(cyan("Clean", color_enabled), color_enabled))
     mode = "apply" if not report.dry_run else "dry-run"
-    print(f"Mode: {mode} reclaimed={human_bytes(report.total_reclaimed_bytes)}")
+    print(f"Mode: {mode} reclaimed={format_bytes(report.total_reclaimed_bytes)}")
     for action in report.actions:
-        if action.state in {"done", "planned"}:
-            status_style = green
-        elif action.state == "skipped":
-            status_style = yellow
-        elif action.state == "failed":
-            status_style = red
-        else:
-            status_style = dim
-        print(f"{status_style(action.name, color_enabled)} [{action.state}] {action.detail}")
+        print(f"{action.name} [{action.state}] {action.detail}")
+        if action.reclaimed_bytes:
+            print(f"  reclaimed: {format_bytes(action.reclaimed_bytes)}")
         if action.command:
             print(f"  command: {' '.join(action.command)}")
-        if action.reclaimed_bytes:
-            print(f"  reclaimed: {human_bytes(action.reclaimed_bytes)}")
         if action.evidence:
-            print(f"  evidence: {', '.join(action.evidence[:4])}")
+            print(f"  evidence: {', '.join(action.evidence[:3])}")
         if action.missing:
             print(f"  missing: {', '.join(action.missing)}")
     if report.recommendations:
