@@ -182,7 +182,7 @@ def _print_snapshot(json_output: bool, raw: bool, color_enabled: bool) -> None:
 
 
 def _render_snapshot(info, raw: bool, color_enabled: bool) -> None:
-    print(cyan("System", color_enabled))
+    _section_header("System", color_enabled, "A compact overview of the current machine.")
     print(f"Host:      {info.identity.hostname}")
     print(f"Kernel:    {info.identity.kernel} ({info.identity.machine})")
     print(f"Distro:    {info.identity.distribution}")
@@ -196,7 +196,7 @@ def _render_snapshot(info, raw: bool, color_enabled: bool) -> None:
     print(f"CPU:       {info.cpu_info.model_name or info.cpu_info.architecture} ({info.cpu_info.logical_cpus} threads)")
     print(f"Memory:    {format_bytes(info.memory.used)} / {format_bytes(info.memory.total)} ({info.memory.used_percent:.2f}%)")
     print(f"Disk /:    {format_bytes(info.root_disk.used)} / {format_bytes(info.root_disk.total)} ({info.root_disk.used_percent:.2f}%)")
-    print(dim("Network:", color_enabled))
+    print(dim("Network interfaces", color_enabled))
     for interface in info.network:
         state = interface.operstate or "unknown"
         ipv4 = interface.ipv4 or "-"
@@ -429,6 +429,17 @@ def _print_root_tip(color_enabled: bool) -> None:
     print(dim("Tip: add `--root` to rerun this command with sudo and unlock deeper diagnostics.", color_enabled))
 
 
+def _section_header(title: str, color_enabled: bool, subtitle: str | None = None) -> None:
+    print(bold(cyan(title, color_enabled), color_enabled))
+    print(dim("─" * 72, color_enabled))
+    if subtitle:
+        print(dim(subtitle, color_enabled))
+
+
+def _list_item(text: str, color_enabled: bool) -> None:
+    print(f"  {dim('•', color_enabled)} {text}")
+
+
 def _print_report(output_format: str, output: str | None, limit: int, project_root: str, latest: bool) -> None:
     report = generate_report(project_root=project_root, limit=limit, include_latest_crash=latest)
     rendered = json.dumps(report.to_dict(), indent=2) if output_format == "json" else report_to_markdown(report, limit=limit)
@@ -459,6 +470,7 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     if json_output:
         print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "security": security.to_dict(), "containers": containers.to_dict(), "firewall": firewall.to_dict(), "performance": performance.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
         return
+    _section_header("LxPerun All", color_enabled, "A single pass across the whole diagnostics stack.")
     _render_snapshot(info, raw=raw, color_enabled=color_enabled)
     print()
     _render_capabilities(capabilities, color_enabled=color_enabled)
@@ -491,7 +503,7 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
 
 
 def _render_doctor(report, color_enabled: bool) -> None:
-    print(bold(cyan("Doctor", color_enabled), color_enabled))
+    _section_header("Doctor", color_enabled, "Kernel, logs, services, and syntax diagnostics.")
     if not report.issues:
         print(green("LxPerun doctor: no issues found.", color_enabled))
         return
@@ -507,7 +519,7 @@ def _render_doctor(report, color_enabled: bool) -> None:
 
 def _render_rings(report, color_enabled: bool) -> None:
     root_text = "yes" if report.is_root else "no"
-    print(bold(cyan("Rings", color_enabled), color_enabled))
+    _section_header("Rings", color_enabled, "What the current context can safely reach.")
     print(f"Effective UID: {report.effective_uid} root={root_text}")
     for layer in report.layers:
         status = "available" if layer.available else "limited"
@@ -523,7 +535,7 @@ def _render_rings(report, color_enabled: bool) -> None:
 
 def _render_capabilities(report, color_enabled: bool) -> None:
     root_text = "yes" if report.is_root else "no"
-    print(bold(cyan("Capabilities", color_enabled), color_enabled))
+    _section_header("Capabilities", color_enabled, "Which subsystems are reachable right now.")
     print(f"Effective UID: {report.effective_uid} root={root_text}")
     for probe in report.probes:
         status = "yes" if probe.available else "no"
@@ -536,7 +548,7 @@ def _render_capabilities(report, color_enabled: bool) -> None:
 
 def _render_security(report, color_enabled: bool) -> None:
     root_text = "yes" if report.is_root else "no"
-    print(bold(cyan("Security", color_enabled), color_enabled))
+    _section_header("Security", color_enabled, "Posture checks for exposure, permissions, and isolation.")
     print(f"Effective UID: {report.effective_uid} root={root_text}")
     if report.issue_count:
         print(yellow(f"Summary: {report.issue_count} issue(s), {report.advisory_count} advisory finding(s).", color_enabled))
@@ -553,7 +565,7 @@ def _render_security(report, color_enabled: bool) -> None:
         if signal.missing:
             print(f"    missing: {', '.join(signal.missing)}")
     if report.findings:
-        print("Findings:")
+        print(dim("Findings", color_enabled))
         for finding in report.findings:
             severity_style = green if finding.severity in {"info", "ok"} else yellow if finding.severity == "warning" else red
             print(f"  {severity_style(f'[{finding.severity.upper()}]', color_enabled)} {finding.category}: {finding.message}")
@@ -566,14 +578,14 @@ def _render_security(report, color_enabled: bool) -> None:
     else:
         print(green("No security posture issues found.", color_enabled))
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  - {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 def _render_containers(report, color_enabled: bool) -> None:
     root_text = "yes" if report.is_root else "no"
-    print(bold(cyan("Containers", color_enabled), color_enabled))
+    _section_header("Containers", color_enabled, "Container runtime and namespace visibility.")
     print(f"Effective UID: {report.effective_uid} root={root_text}")
     for signal in report.signals:
         status = "yes" if signal.available else "no"
@@ -583,7 +595,7 @@ def _render_containers(report, color_enabled: bool) -> None:
         if signal.missing:
             print(f"  missing: {', '.join(signal.missing)}")
     if report.findings:
-        print("Findings:")
+        print(dim("Findings", color_enabled))
         for finding in report.findings:
             print(f"  [{finding.severity.upper()}] {finding.category}: {finding.message}")
             if finding.detail:
@@ -593,13 +605,13 @@ def _render_containers(report, color_enabled: bool) -> None:
             if finding.evidence:
                 print(f"    evidence: {', '.join(finding.evidence[:5])}")
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  - {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 def _render_firewall(report, color_enabled: bool) -> None:
-    print(bold(cyan("Firewall", color_enabled), color_enabled))
+    _section_header("Firewall", color_enabled, "Firewall backends and what they allow through.")
     for backend in report.backends:
         state = "yes" if backend.available else "no"
         print(f"{backend.name:<12} {state:<3} command={backend.command}")
@@ -608,7 +620,7 @@ def _render_firewall(report, color_enabled: bool) -> None:
         if backend.missing:
             print(f"  missing: {', '.join(backend.missing)}")
     if report.mappings:
-        print("Listening socket mapping:")
+        print(dim("Listening socket mapping", color_enabled))
         for mapping in report.mappings[:20]:
             print(f"  {mapping.backend:<10} {mapping.protocol}/{mapping.port:<5} {mapping.address:<15} {mapping.decision}")
             print(f"    {mapping.reason}")
@@ -617,15 +629,15 @@ def _render_firewall(report, color_enabled: bool) -> None:
     else:
         print("No matching firewall mappings found.")
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  - {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 def _render_performance(report, raw: bool, color_enabled: bool) -> None:
-    print(bold(cyan("Performance", color_enabled), color_enabled))
+    _section_header("Performance", color_enabled, "Pressure, interrupts, softirqs, and slab pressure.")
     if report.pressure:
-        print("Pressure Stall Information:")
+        print(dim("Pressure Stall Information", color_enabled))
         for sample in report.pressure:
             if raw:
                 some = f"{sample.some_avg10}/{sample.some_avg60}/{sample.some_avg300}"
@@ -635,7 +647,7 @@ def _render_performance(report, raw: bool, color_enabled: bool) -> None:
                 full = _format_pressure_triplet(sample.full_avg10, sample.full_avg60, sample.full_avg300)
             print(f"  {sample.resource:<6} some={some:<24} full={full}")
     if report.interrupts:
-        print("Interrupt load:")
+        print(dim("Interrupt load", color_enabled))
         interrupt_total = sum(cpu.total for cpu in report.interrupts) or 1
         for cpu in report.interrupts[:8]:
             if raw:
@@ -644,7 +656,7 @@ def _render_performance(report, raw: bool, color_enabled: bool) -> None:
                 value = f"{_format_count(cpu.total)} ({(cpu.total / interrupt_total) * 100:.1f}%)"
             print(f"  {cpu.cpu:<8} {value}")
     if report.softirqs:
-        print("Softirq load:")
+        print(dim("Softirq load", color_enabled))
         softirq_total = sum(cpu.total for cpu in report.softirqs) or 1
         for cpu in report.softirqs[:8]:
             if raw:
@@ -653,16 +665,16 @@ def _render_performance(report, raw: bool, color_enabled: bool) -> None:
                 value = f"{_format_count(cpu.total)} ({(cpu.total / softirq_total) * 100:.1f}%)"
             print(f"  {cpu.cpu:<8} {value}")
     if report.slabinfo:
-        print("Slab caches:")
+        print(dim("Slab caches", color_enabled))
         for cache in report.slabinfo[:12]:
             if raw:
                 print(f"  {cache.name:<24} active={cache.active_objs:<8} size={cache.object_size:<6} bytes={cache.active_bytes}")
             else:
                 print(f"  {cache.name:<24} active={_format_count(cache.active_objs):<8} size={_format_bytes(cache.object_size):<8} bytes={_format_bytes(cache.active_bytes)}")
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  - {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 def _format_pressure_triplet(avg10: float | None, avg60: float | None, avg300: float | None) -> str:
@@ -697,7 +709,7 @@ def _format_bytes(value: int) -> str:
 
 
 def _render_network(report, color_enabled: bool) -> None:
-    print(bold(cyan("Network", color_enabled), color_enabled))
+    _section_header("Network", color_enabled, "Sockets, ARP, conntrack, and bandwidth samples.")
     print(f"Sockets: {len(report.sockets)} listening={len(report.listening_sockets)} arp={len(report.arp)} conntrack={len(report.conntrack)}")
     print(f"Bandwidth sample time: {report.bandwidth.timestamp:.0f}")
     for sample in report.bandwidth.interfaces[:12]:
@@ -709,22 +721,22 @@ def _render_network(report, color_enabled: bool) -> None:
 
     grouped = group_sockets(report.sockets)
     if grouped["listening"]:
-        print("Listening sockets:")
+        print(dim("Listening sockets", color_enabled))
         for socket_entry in grouped["listening"][:12]:
             pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
             print(f"  {socket_entry.protocol:<5} {socket_entry.local_address}:{socket_entry.local_port:<5} pid={pid_text} inode={socket_entry.inode}")
     if grouped["established"]:
-        print("Established sockets:")
+        print(dim("Established sockets", color_enabled))
         for socket_entry in grouped["established"][:12]:
             pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
             print(f"  {socket_entry.protocol:<5} {socket_entry.local_address}:{socket_entry.local_port:<5} -> {socket_entry.remote_address}:{socket_entry.remote_port:<5} pid={pid_text}")
     if grouped["unix"]:
-        print("Unix sockets:")
+        print(dim("Unix sockets", color_enabled))
         for socket_entry in grouped["unix"][:12]:
             pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
             print(f"  {socket_entry.state:<10} {socket_entry.path or socket_entry.local_address} pid={pid_text}")
     if grouped["other"]:
-        print("Other sockets:")
+        print(dim("Other sockets", color_enabled))
         for socket_entry in grouped["other"][:12]:
             pid_text = ",".join(str(pid) for pid in socket_entry.pids) if socket_entry.pids else "-"
             endpoint = f"{socket_entry.local_address}:{socket_entry.local_port}"
@@ -734,7 +746,7 @@ def _render_network(report, color_enabled: bool) -> None:
 
 
 def _render_processes(report, limit: int, raw: bool, color_enabled: bool) -> None:
-    print(bold(cyan("Processes", color_enabled), color_enabled))
+    _section_header("Processes", color_enabled, "Top memory users and lightweight process metadata.")
     print(f"Total: {report.total} processes, unreadable: {report.unreadable}, zombies: {len(zombie_processes(report))}")
     print(f"    PID USER                RSS    FD STATE          COMMAND")
     for process in top_by_memory(report, limit):
@@ -745,22 +757,22 @@ def _render_processes(report, limit: int, raw: bool, color_enabled: bool) -> Non
 
 
 def _render_services(report, limit: int, color_enabled: bool) -> None:
-    print(bold(cyan("Services", color_enabled), color_enabled))
+    _section_header("Services", color_enabled, "systemd health and failed units.")
     print(f"Available: {report.available} total={report.total_units} active={report.active_units} running={report.running_units} failed={report.failed_count}")
     if report.failed_units:
-        print("Failed units:")
+        print(dim("Failed units", color_enabled))
         for unit in report.failed_units[:limit]:
             print(f"  {unit.name}")
 
 
 def _render_storage(report, limit: int, raw: bool, color_enabled: bool) -> None:
-    print(bold(cyan("Storage", color_enabled), color_enabled))
+    _section_header("Storage", color_enabled, "Mounts and block devices with human-readable usage.")
     print(f"Mounts: {report.mount_count} Devices: {report.device_count}")
     print(f"{'MOUNT':<18} {'FS':<12} {'USED':>10} {'TOTAL':>10} {'%':>6} DEVICE")
     for mount in report.mounts[:limit]:
         print(f"{mount.mount_point:<18} {mount.filesystem:<12} {format_bytes(mount.used):>10} {format_bytes(mount.total):>10} {mount.used_percent:>5.1f}% {mount.device}")
     if report.devices:
-        print("Devices:")
+        print(dim("Devices", color_enabled))
         for device in report.devices[:limit]:
             rot = "rot" if device.rotational else "nonrot" if device.rotational is False else "-"
             ro = "ro" if device.read_only else "rw" if device.read_only is False else "-"
@@ -768,31 +780,31 @@ def _render_storage(report, limit: int, raw: bool, color_enabled: bool) -> None:
 
 
 def _render_hardware(report, limit: int, raw: bool, color_enabled: bool) -> None:
-    print(bold(cyan("Hardware", color_enabled), color_enabled))
+    _section_header("Hardware", color_enabled, "PCI, USB, sensors, and NUMA.")
     print(f"PCI: {report.pci_count} USB: {report.usb_count} Sensors: {report.sensor_count} NUMA nodes: {report.numa_count}")
     if report.pci_devices:
-        print("PCI:")
+        print(dim("PCI", color_enabled))
         for device in report.pci_devices[:limit]:
             print(f"  {device.bdf} {device.vendor_id or '-'}:{device.device_id or '-'} class={device.class_code or '-'} driver={device.driver or '-'}")
     if report.usb_devices:
-        print("USB:")
+        print(dim("USB", color_enabled))
         for device in report.usb_devices[:limit]:
             bus_label = device.path
             if device.busnum is not None:
                 bus_label = f"{device.busnum}:{device.devnum}" if device.devnum is not None else str(device.busnum)
             print(f"  {bus_label:<12} {device.id_vendor or '-'}:{device.id_product or '-'} {device.manufacturer or ''} {device.product or ''}".rstrip())
     if report.sensors:
-        print("Sensors:")
+        print(dim("Sensors", color_enabled))
         for sensor in report.sensors[:limit]:
             print(f"  {sensor.chip:<16} {sensor.label:<18} {human_sensor_value(sensor.value, sensor.unit)}")
     if report.numa_nodes:
-        print("NUMA:")
+        print(dim("NUMA", color_enabled))
         for node in report.numa_nodes[:limit]:
             print(f"  {node.name:<8} cpus={node.cpulist or '-'} mem_total_kb={node.mem_total_kb or '-'} mem_free_kb={node.mem_free_kb or '-'}")
 
 
 def _render_trace_report(report, color_enabled: bool) -> None:
-    print(bold(cyan("Trace", color_enabled), color_enabled))
+    _section_header("Trace", color_enabled, "Tracing readiness and available debug tools.")
     print(f"Ready: {report.ready} perf_event_paranoid={report.perf_event_paranoid}")
     for tool in report.tools:
         status = "yes" if tool.available else "no"
@@ -802,45 +814,46 @@ def _render_trace_report(report, color_enabled: bool) -> None:
         if tool.missing:
             print(f"  missing: {', '.join(tool.missing)}")
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 def _render_trace_execution(execution, color_enabled: bool) -> None:
-    print(bold(cyan("Trace execution", color_enabled), color_enabled))
+    _section_header("Trace execution", color_enabled, "Live command trace output.")
     print(f"Mode: {execution.mode} exit={execution.exit_code}")
     print(f"Command: {' '.join(execution.command)}")
     if execution.trace_file:
         print(f"Trace file: {execution.trace_file}")
     if execution.trace_lines:
-        print("Trace lines:")
+        print(dim("Trace lines", color_enabled))
         for line in execution.trace_lines[:20]:
             print(f"  {line}")
 
 
 def _render_crash(report, color_enabled: bool) -> None:
-    print(bold(cyan("Crash", color_enabled), color_enabled))
+    _section_header("Crash", color_enabled, "Coredumps and native backtrace readiness.")
     print(f"Ready: {report.ready} coredumps={report.coredump_count}")
     if report.coredump_summaries:
-        print("Coredumps:")
+        print(dim("Coredumps", color_enabled))
         for line in report.coredump_summaries[:8]:
             print(f"  {line}")
     if report.latest_info:
-        print("Latest:")
+        print(dim("Latest", color_enabled))
         print(report.latest_info)
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 def _render_clean(report, color_enabled: bool) -> None:
-    print(bold(cyan("Clean", color_enabled), color_enabled))
+    _section_header("Clean", color_enabled, "Disk space cleanup actions and what they reclaimed.")
     mode = "apply" if not report.dry_run else "dry-run"
     print(f"Mode: {mode} reclaimed={format_bytes(report.total_reclaimed_bytes)}")
     for action in report.actions:
-        print(f"{action.name} [{action.state}] {action.detail}")
+        state_color = green if action.state == "done" else yellow if action.state == "skipped" else red if action.state == "failed" else cyan
+        print(f"{state_color(action.name, color_enabled)} [{state_color(action.state, color_enabled)}] {action.detail}")
         if action.reclaimed_bytes:
             print(f"  reclaimed: {format_bytes(action.reclaimed_bytes)}")
         if action.command:
@@ -850,9 +863,9 @@ def _render_clean(report, color_enabled: bool) -> None:
         if action.missing:
             print(f"  missing: {', '.join(action.missing)}")
     if report.recommendations:
-        print("Recommendations:")
+        print(dim("Recommendations", color_enabled))
         for recommendation in report.recommendations:
-            print(f"  {recommendation}")
+            _list_item(recommendation, color_enabled)
 
 
 if __name__ == "__main__":
