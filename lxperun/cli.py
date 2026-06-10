@@ -66,6 +66,7 @@ def main() -> None:
 
     performance_parser = subparsers.add_parser("performance", help="show PSI, interrupts, and slabinfo")
     performance_parser.add_argument("--json", action="store_true", help="print raw JSON")
+    performance_parser.add_argument("--raw", action="store_true", help="print raw numeric values")
 
     containers_parser = subparsers.add_parser("containers", help="show container and namespace visibility")
     containers_parser.add_argument("--json", action="store_true", help="print raw JSON")
@@ -141,7 +142,7 @@ def main() -> None:
     elif command == "firewall":
         _print_firewall(json_output=args.json, color_enabled=color_enabled)
     elif command == "performance":
-        _print_performance(json_output=args.json, color_enabled=color_enabled)
+        _print_performance(json_output=args.json, raw=args.raw, color_enabled=color_enabled)
     elif command == "containers":
         _print_containers(json_output=args.json, color_enabled=color_enabled)
     elif command == "processes":
@@ -267,12 +268,12 @@ def _print_firewall(json_output: bool, color_enabled: bool) -> None:
     _render_firewall(report, color_enabled=color_enabled)
 
 
-def _print_performance(json_output: bool, color_enabled: bool) -> None:
+def _print_performance(json_output: bool, raw: bool, color_enabled: bool) -> None:
     report = performance_report()
     if json_output:
         print(json.dumps(report.to_dict(), indent=2))
         return
-    _render_performance(report, color_enabled=color_enabled)
+    _render_performance(report, raw=raw, color_enabled=color_enabled)
 
 
 def _print_containers(json_output: bool, color_enabled: bool) -> None:
@@ -359,7 +360,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "network": ("Socket, ARP, conntrack, and bandwidth diagnostics.", ["Shows listening ports, per-PID sockets, ARP entries, conntrack, and rx/tx samples.", "Add `--watch` to refresh the view live."]),
         "security": ("Security posture checks.", ["Checks SELinux/AppArmor status, exposed listeners, UID 0 accounts, and loose permissions.", "Add `--root` for deeper checks such as /etc/shadow."]),
         "firewall": ("Firewall audit.", ["Shows iptables/nftables rules and maps listening sockets to allow/block decisions."]),
-        "performance": ("Performance deep-dive.", ["Shows PSI, interrupt distribution, softirqs, and slab caches."]),
+        "performance": ("Performance deep-dive.", ["Shows PSI, interrupt distribution, softirqs, and slab caches. Add `--raw` for raw counters."]),
         "containers": ("Container visibility.", ["Shows cgroup markers, runtime sockets, and namespace visibility."]),
         "processes": ("Process analysis.", ["Top processes by memory, zombies, fd count, command line, and state."]),
         "services": ("systemd service state.", ["Failed units, activity, and basic unit health."]),
@@ -406,6 +407,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun security --root")
     print("  lxperun firewall --root")
     print("  lxperun performance")
+    print("  lxperun performance --raw")
     print("  lxperun containers --root")
     print("  lxperun clean --apply")
     print("  lxperun --root clean --apply")
@@ -463,7 +465,7 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     print()
     _render_firewall(firewall, color_enabled=color_enabled)
     print()
-    _render_performance(performance, color_enabled=color_enabled)
+    _render_performance(performance, raw=raw, color_enabled=color_enabled)
     print()
     _render_rings(rings, color_enabled=color_enabled)
     print()
@@ -616,28 +618,78 @@ def _render_firewall(report, color_enabled: bool) -> None:
             print(f"  - {recommendation}")
 
 
-def _render_performance(report, color_enabled: bool) -> None:
+def _render_performance(report, raw: bool, color_enabled: bool) -> None:
     print(bold(cyan("Performance", color_enabled), color_enabled))
     if report.pressure:
         print("Pressure Stall Information:")
         for sample in report.pressure:
-            print(f"  {sample.resource}: some={sample.some_avg10}/{sample.some_avg60}/{sample.some_avg300} full={sample.full_avg10}/{sample.full_avg60}/{sample.full_avg300}")
+            if raw:
+                some = f"{sample.some_avg10}/{sample.some_avg60}/{sample.some_avg300}"
+                full = f"{sample.full_avg10}/{sample.full_avg60}/{sample.full_avg300}"
+            else:
+                some = _format_pressure_triplet(sample.some_avg10, sample.some_avg60, sample.some_avg300)
+                full = _format_pressure_triplet(sample.full_avg10, sample.full_avg60, sample.full_avg300)
+            print(f"  {sample.resource:<6} some={some:<24} full={full}")
     if report.interrupts:
         print("Interrupt load:")
+        interrupt_total = sum(cpu.total for cpu in report.interrupts) or 1
         for cpu in report.interrupts[:8]:
-            print(f"  {cpu.cpu:<8} {cpu.total}")
+            if raw:
+                value = str(cpu.total)
+            else:
+                value = f"{_format_count(cpu.total)} ({(cpu.total / interrupt_total) * 100:.1f}%)"
+            print(f"  {cpu.cpu:<8} {value}")
     if report.softirqs:
         print("Softirq load:")
+        softirq_total = sum(cpu.total for cpu in report.softirqs) or 1
         for cpu in report.softirqs[:8]:
-            print(f"  {cpu.cpu:<8} {cpu.total}")
+            if raw:
+                value = str(cpu.total)
+            else:
+                value = f"{_format_count(cpu.total)} ({(cpu.total / softirq_total) * 100:.1f}%)"
+            print(f"  {cpu.cpu:<8} {value}")
     if report.slabinfo:
         print("Slab caches:")
         for cache in report.slabinfo[:12]:
-            print(f"  {cache.name:<24} active={cache.active_objs:<8} size={cache.object_size:<6} bytes={cache.active_bytes}")
+            if raw:
+                print(f"  {cache.name:<24} active={cache.active_objs:<8} size={cache.object_size:<6} bytes={cache.active_bytes}")
+            else:
+                print(f"  {cache.name:<24} active={_format_count(cache.active_objs):<8} size={_format_bytes(cache.object_size):<8} bytes={_format_bytes(cache.active_bytes)}")
     if report.recommendations:
         print("Recommendations:")
         for recommendation in report.recommendations:
             print(f"  - {recommendation}")
+
+
+def _format_pressure_triplet(avg10: float | None, avg60: float | None, avg300: float | None) -> str:
+    return "/".join(_format_percent(value) for value in (avg10, avg60, avg300))
+
+
+def _format_percent(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.2f}%"
+
+
+def _format_count(value: int) -> str:
+    thresholds = (
+        (1_000_000_000, "B"),
+        (1_000_000, "M"),
+        (1_000, "K"),
+    )
+    for threshold, suffix in thresholds:
+        if value >= threshold:
+            return f"{value / threshold:.1f}{suffix}"
+    return str(value)
+
+
+def _format_bytes(value: int) -> str:
+    if value < 1024:
+        return f"{value} B"
+    for suffix, threshold in (("KiB", 1024), ("MiB", 1024**2), ("GiB", 1024**3), ("TiB", 1024**4)):
+        if value < threshold * 1024 or suffix == "TiB":
+            return f"{value / threshold:.1f} {suffix}"
+    return f"{value} B"
 
 
 def _render_network(report, color_enabled: bool) -> None:

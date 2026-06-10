@@ -97,7 +97,8 @@ to unlock deeper checks.
 or block decisions where possible.
 
 `performance` shows PSI pressure, interrupt/softirq load distribution, and the
-heaviest slab caches.
+heaviest slab caches. Add `--raw` if you want the underlying counters instead of
+human-friendly labels.
 
 `containers` is a focused view of the container signals already discovered by
 the security scan: cgroups, runtime sockets, and namespace visibility.

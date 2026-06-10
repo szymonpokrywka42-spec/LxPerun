@@ -55,6 +55,7 @@ class CliHelpTest(unittest.TestCase):
         output = buffer.getvalue()
         self.assertIn("performance", output)
         self.assertIn("PSI", output)
+        self.assertIn("--raw", output)
 
     def test_help_containers_mentions_cgroup(self) -> None:
         buffer = io.StringIO()
