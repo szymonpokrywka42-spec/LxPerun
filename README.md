@@ -36,6 +36,9 @@ python -m lxperun.cli rings
 python -m lxperun.cli capabilities
 python -m lxperun.cli network
 python -m lxperun.cli security
+python -m lxperun.cli firewall
+python -m lxperun.cli performance
+python -m lxperun.cli containers
 python -m lxperun.cli processes
 python -m lxperun.cli services
 python -m lxperun.cli storage
@@ -57,21 +60,12 @@ If you installed LxPerun with `pipx`, `sudo lxperun` may not be found because
 sudo env "PATH=$PATH" lxperun all
 ```
 
-or install a tiny system-wide wrapper once:
-
-```bash
-sudo bash scripts/install-sudo-wrapper.sh
-```
-
-After that, plain `sudo lxperun ...` works too. You can remove the wrapper
-later with `sudo bash scripts/uninstall-sudo-wrapper.sh`.
-
 If you prefer a native package manager install, you can still use the packaged
 RPM so the command is available system-wide.
 
 By default, LxPerun shows friendly, readable values. If you want raw numbers,
 add `--raw`; if you want to disable colors, use `--no-color`; if you want to
-automatically rerun a command with sudo, add `--root`.
+automatically rerun a command with sudo and unlock deeper checks, add `--root`.
 
 `snapshot` collects raw facts: kernel, distro, CPU, RAM, disks, mounts, network,
 kernel modules, and selected sysctl values.
@@ -98,6 +92,15 @@ bound to all interfaces, UID 0 accounts, passwordless shadow entries when run
 as root, container/cgroup markers, runtime API sockets, namespace visibility,
 and world-writable paths under `/etc`, `/opt`, and `/usr/local`. Add `--root`
 to unlock deeper checks.
+
+`firewall` audits iptables/nftables rules and maps listening sockets to allow
+or block decisions where possible.
+
+`performance` shows PSI pressure, interrupt/softirq load distribution, and the
+heaviest slab caches.
+
+`containers` is a focused view of the container signals already discovered by
+the security scan: cgroups, runtime sockets, and namespace visibility.
 
 `processes` reads `/proc/<pid>` and shows processes, RSS memory, fd count,
 state, user, command line, and zombies.
@@ -130,8 +133,9 @@ python -m lxperun.cli report --format json --output lxperun-report.json
 ```
 
 `all` runs the current full report set: snapshot, capabilities, security,
-rings, doctor, network, processes, services, storage, hardware, trace, and
-crash. Use `--json` if you want full data for scripts.
+containers, firewall, performance, rings, doctor, network, processes, services,
+storage, hardware, trace, and crash. Use `--json` if you want full data for
+scripts.
 
 Most commands work without root and will still show useful partial data. When a
 command can benefit from deeper privileges, LxPerun prints a tip telling you to

@@ -6,10 +6,13 @@ from pathlib import Path
 
 from .capabilities import capability_report
 from .crash import crash_report
+from .containers import container_report
 from .doctor import diagnose
+from .firewall import firewall_report
 from .hardware import hardware_report
 from .linux import snapshot
 from .network import network_report
+from .performance import performance_report
 from .processes import process_report
 from .rings import access_map
 from .security import security_report
@@ -24,6 +27,9 @@ class PerunReport:
     snapshot: object
     capabilities: object
     security: object
+    containers: object | None
+    firewall: object | None
+    performance: object | None
     rings: object
     doctor: object
     processes: object
@@ -45,6 +51,9 @@ def generate_report(project_root: Path | str = ".", limit: int = 12, include_lat
         snapshot=snapshot(),
         capabilities=capability_report(),
         security=security_report(),
+        containers=container_report(),
+        firewall=firewall_report(),
+        performance=performance_report(),
         rings=access_map(),
         doctor=diagnose(project_root),
         processes=process_report(),
@@ -66,6 +75,9 @@ def report_to_markdown(report: PerunReport, limit: int = 12) -> str:
     _add_snapshot_section(lines, report.snapshot)
     _add_capabilities_section(lines, report.capabilities)
     _add_security_section(lines, report.security)
+    _add_containers_section(lines, report.containers)
+    _add_firewall_section(lines, report.firewall)
+    _add_performance_section(lines, report.performance)
     _add_rings_section(lines, report.rings)
     _add_doctor_section(lines, report.doctor)
     _add_network_section(lines, report.network)
@@ -110,6 +122,47 @@ def _add_security_section(lines: list[str], security_report_obj: object) -> None
         lines.append(f"- `{finding.severity.upper()}` `{finding.category}`: {finding.message}")
     for recommendation in security_report_obj.recommendations:
         lines.append(f"- {recommendation}")
+    lines.append("")
+
+
+def _add_containers_section(lines: list[str], container_report_obj: object | None) -> None:
+    if container_report_obj is None:
+        return
+    lines.append("## Containers")
+    lines.append(f"- Root: `{container_report_obj.is_root}`")
+    lines.append(f"- Effective UID: `{container_report_obj.effective_uid}`")
+    lines.append(f"- Signals: `{len(container_report_obj.signals)}`")
+    lines.append(f"- Findings: `{len(container_report_obj.findings)}`")
+    for finding in container_report_obj.findings:
+        lines.append(f"- `{finding.severity.upper()}` `{finding.category}`: {finding.message}")
+    lines.append("")
+
+
+def _add_firewall_section(lines: list[str], firewall_report_obj: object | None) -> None:
+    if firewall_report_obj is None:
+        return
+    lines.append("## Firewall")
+    lines.append(f"- Backends: `{len(firewall_report_obj.backends)}`")
+    lines.append(f"- Mappings: `{len(firewall_report_obj.mappings)}`")
+    for backend in firewall_report_obj.backends:
+        lines.append(f"- `{backend.name}`: `{backend.available}`")
+    for mapping in firewall_report_obj.mappings[:10]:
+        lines.append(f"- `{mapping.backend}` `{mapping.protocol}/{mapping.port}` `{mapping.decision}` - {mapping.reason}")
+    lines.append("")
+
+
+def _add_performance_section(lines: list[str], performance_report_obj: object | None) -> None:
+    if performance_report_obj is None:
+        return
+    lines.append("## Performance")
+    lines.append(f"- PSI samples: `{len(performance_report_obj.pressure)}`")
+    lines.append(f"- Interrupt CPUs: `{len(performance_report_obj.interrupts)}`")
+    lines.append(f"- Softirq CPUs: `{len(performance_report_obj.softirqs)}`")
+    lines.append(f"- Slab caches: `{len(performance_report_obj.slabinfo)}`")
+    for sample in performance_report_obj.pressure:
+        lines.append(f"- `{sample.resource}` pressure")
+    for cache in performance_report_obj.slabinfo[:10]:
+        lines.append(f"- `{cache.name}` `{cache.active_bytes}` bytes active")
     lines.append("")
 
 

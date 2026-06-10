@@ -38,6 +38,33 @@ class CliHelpTest(unittest.TestCase):
         self.assertIn("--root", output)
         self.assertIn("SELinux", output)
 
+    def test_help_firewall_mentions_ruleset(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "firewall"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("firewall", output)
+        self.assertIn("iptables", output)
+
+    def test_help_performance_mentions_psi(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "performance"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("performance", output)
+        self.assertIn("PSI", output)
+
+    def test_help_containers_mentions_cgroup(self) -> None:
+        buffer = io.StringIO()
+        with patch.object(sys, "argv", ["lxperun", "help", "containers"]), redirect_stdout(buffer):
+            main()
+
+        output = buffer.getvalue()
+        self.assertIn("containers", output)
+        self.assertIn("cgroup", output)
+
     def test_root_flag_reexecs_through_sudo(self) -> None:
         calls: list[list[str]] = []
 

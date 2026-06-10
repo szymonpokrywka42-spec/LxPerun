@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import re
 from pathlib import Path
 import os
 import shutil
 import stat
 from typing import Callable
 
-from .linux import PROC, run_command
+from .linux import run_command
 from .network import NetworkReport, network_report
 
 

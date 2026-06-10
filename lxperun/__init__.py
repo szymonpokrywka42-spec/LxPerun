@@ -2,6 +2,8 @@
 
 from .capabilities import CapabilityProbe, CapabilityReport, capability_report
 from .clean import CleanAction, CleanReport, clean
+from .containers import ContainerReport, container_report
+from .firewall import FirewallBackend, FirewallPortMapping, FirewallReport, firewall_report
 from .linux import (
     BlockDevice,
     CpuTimes,
@@ -28,6 +30,7 @@ from .linux import (
 )
 from .rings import AccessLayer, AccessMap, access_map
 from .security import SecurityFinding, SecurityReport, SecuritySignal, security_report
+from .performance import CpuLoad, PerformanceReport, PressureSample, SlabCache, performance_report
 from .processes import ProcessInfo, ProcessReport, inspect_process, process_report, top_by_memory, zombie_processes
 from .services import ServiceReport, ServiceUnit, service_report
 from .storage import BlockIOStats, StorageDevice, StorageMount, StorageReport, storage_report
@@ -73,6 +76,14 @@ __all__ = [
     "SecurityReport",
     "SecuritySignal",
     "SecurityFinding",
+    "ContainerReport",
+    "FirewallBackend",
+    "FirewallPortMapping",
+    "FirewallReport",
+    "PerformanceReport",
+    "PressureSample",
+    "CpuLoad",
+    "SlabCache",
     "NetworkReport",
     "SocketEntry",
     "ArpEntry",
@@ -109,6 +120,9 @@ __all__ = [
     "uptime_seconds",
     "access_map",
     "security_report",
+    "container_report",
+    "firewall_report",
+    "performance_report",
     "capability_report",
     "clean",
     "inspect_process",

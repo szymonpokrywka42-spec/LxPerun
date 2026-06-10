@@ -11,11 +11,14 @@ from pathlib import Path
 from .capabilities import capability_report
 from .clean import clean as clean_system
 from .crash import crash_report
+from .containers import container_report
 from .doctor import diagnose
+from .firewall import firewall_report
 from .formatting import human_bytes, human_sensor_value, human_uptime
 from .hardware import hardware_report
 from .linux import format_bytes, snapshot
 from .network import group_sockets, network_report
+from .performance import performance_report
 from .processes import process_report, top_by_memory, zombie_processes
 from .report import generate_report, report_to_markdown
 from .rings import access_map
@@ -26,7 +29,7 @@ from .trace import trace_command, trace_report
 from .ui import bold, cyan, dim, green, red, supports_color, yellow
 
 
-_ROOT_SENSITIVE_COMMANDS = {"doctor", "rings", "capabilities", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "report", "all", "network", "security"}
+_ROOT_SENSITIVE_COMMANDS = {"doctor", "rings", "capabilities", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "report", "all", "network", "security", "firewall", "containers"}
 
 
 def main() -> None:
@@ -57,6 +60,15 @@ def main() -> None:
 
     security_parser = subparsers.add_parser("security", help="show security posture checks")
     security_parser.add_argument("--json", action="store_true", help="print raw JSON")
+
+    firewall_parser = subparsers.add_parser("firewall", help="audit firewall rules against open ports")
+    firewall_parser.add_argument("--json", action="store_true", help="print raw JSON")
+
+    performance_parser = subparsers.add_parser("performance", help="show PSI, interrupts, and slabinfo")
+    performance_parser.add_argument("--json", action="store_true", help="print raw JSON")
+
+    containers_parser = subparsers.add_parser("containers", help="show container and namespace visibility")
+    containers_parser.add_argument("--json", action="store_true", help="print raw JSON")
 
     processes_parser = subparsers.add_parser("processes", help="show process diagnostics")
     processes_parser.add_argument("--json", action="store_true", help="print raw JSON")
@@ -126,6 +138,12 @@ def main() -> None:
         _print_network(json_output=args.json, watch=args.watch, interval=args.interval, color_enabled=color_enabled)
     elif command == "security":
         _print_security(json_output=args.json, color_enabled=color_enabled)
+    elif command == "firewall":
+        _print_firewall(json_output=args.json, color_enabled=color_enabled)
+    elif command == "performance":
+        _print_performance(json_output=args.json, color_enabled=color_enabled)
+    elif command == "containers":
+        _print_containers(json_output=args.json, color_enabled=color_enabled)
     elif command == "processes":
         _print_processes(json_output=args.json, limit=args.limit, raw=args.raw, color_enabled=color_enabled)
     elif command == "services":
@@ -241,6 +259,30 @@ def _print_security(json_output: bool, color_enabled: bool) -> None:
     _render_security(report, color_enabled=color_enabled)
 
 
+def _print_firewall(json_output: bool, color_enabled: bool) -> None:
+    report = firewall_report()
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_firewall(report, color_enabled=color_enabled)
+
+
+def _print_performance(json_output: bool, color_enabled: bool) -> None:
+    report = performance_report()
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_performance(report, color_enabled=color_enabled)
+
+
+def _print_containers(json_output: bool, color_enabled: bool) -> None:
+    report = container_report()
+    if json_output:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+    _render_containers(report, color_enabled=color_enabled)
+
+
 def _print_processes(json_output: bool, limit: int, raw: bool, color_enabled: bool) -> None:
     report = process_report()
     if json_output:
@@ -316,6 +358,9 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "capabilities": ("What LxPerun can currently inspect.", ["Audits access to procfs, sysfs, journal, perf, BPF, and TPM."]),
         "network": ("Socket, ARP, conntrack, and bandwidth diagnostics.", ["Shows listening ports, per-PID sockets, ARP entries, conntrack, and rx/tx samples.", "Add `--watch` to refresh the view live."]),
         "security": ("Security posture checks.", ["Checks SELinux/AppArmor status, exposed listeners, UID 0 accounts, and loose permissions.", "Add `--root` for deeper checks such as /etc/shadow."]),
+        "firewall": ("Firewall audit.", ["Shows iptables/nftables rules and maps listening sockets to allow/block decisions."]),
+        "performance": ("Performance deep-dive.", ["Shows PSI, interrupt distribution, softirqs, and slab caches."]),
+        "containers": ("Container visibility.", ["Shows cgroup markers, runtime sockets, and namespace visibility."]),
         "processes": ("Process analysis.", ["Top processes by memory, zombies, fd count, command line, and state."]),
         "services": ("systemd service state.", ["Failed units, activity, and basic unit health."]),
         "storage": ("Disks, mounts, and I/O.", ["Shows usage, device types, and basic block attributes."]),
@@ -324,7 +369,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
         "crash": ("Coredump analysis.", ["Checks whether tools are available and whether the system collects crash dumps."]),
         "clean": ("Disk cleanup.", ["Dry-runs by default; use `--apply` to remove old coredumps and clean caches."]),
         "report": ("One report for an issue or debugging session.", ["Combines several sections into Markdown or JSON."]),
-        "all": ("Everything at once.", ["Combines snapshot, capabilities, rings, doctor, network, processes, services, storage, hardware, trace, and crash."]),
+        "all": ("Everything at once.", ["Combines snapshot, capabilities, security, containers, firewall, performance, rings, doctor, network, processes, services, storage, hardware, trace, and crash."]),
     }
     if topic:
         entry = guides.get(topic)
@@ -344,7 +389,7 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("LxPerun is a simple Linux diagnostics tool — no unnecessary noise.")
     print()
     print("Key commands:")
-    for name in ("snapshot", "doctor", "network", "security", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
+    for name in ("snapshot", "doctor", "network", "security", "firewall", "performance", "containers", "processes", "services", "storage", "hardware", "trace", "crash", "clean", "rings", "capabilities", "report", "all"):
         summary, _ = guides[name]
         print(f"  {name:<12} {summary}")
     print()
@@ -359,6 +404,9 @@ def _print_help(topic: str | None, color_enabled: bool) -> None:
     print("  lxperun hardware --raw")
     print("  lxperun doctor")
     print("  lxperun security --root")
+    print("  lxperun firewall --root")
+    print("  lxperun performance")
+    print("  lxperun containers --root")
     print("  lxperun clean --apply")
     print("  lxperun --root clean --apply")
     print("  lxperun all --project-root ~/Pulpit/LxPerun")
@@ -390,6 +438,9 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     info = snapshot()
     capabilities = capability_report()
     security = security_report()
+    firewall = firewall_report()
+    performance = performance_report()
+    containers = container_report()
     rings = access_map()
     doctor = diagnose(project_root)
     network = network_report()
@@ -400,13 +451,19 @@ def _print_all(json_output: bool, limit: int, project_root: str, raw: bool, colo
     trace = trace_report()
     crash = crash_report()
     if json_output:
-        print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "security": security.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
+        print(json.dumps({"snapshot": info.to_dict(), "capabilities": capabilities.to_dict(), "security": security.to_dict(), "containers": containers.to_dict(), "firewall": firewall.to_dict(), "performance": performance.to_dict(), "rings": rings.to_dict(), "doctor": doctor.to_dict(), "network": network.to_dict(), "processes": processes.to_dict(), "services": services.to_dict(), "storage": storage.to_dict(), "hardware": hardware.to_dict(), "trace": trace.to_dict(), "crash": crash.to_dict()}, indent=2))
         return
     _render_snapshot(info, raw=raw, color_enabled=color_enabled)
     print()
     _render_capabilities(capabilities, color_enabled=color_enabled)
     print()
     _render_security(security, color_enabled=color_enabled)
+    print()
+    _render_containers(containers, color_enabled=color_enabled)
+    print()
+    _render_firewall(firewall, color_enabled=color_enabled)
+    print()
+    _render_performance(performance, color_enabled=color_enabled)
     print()
     _render_rings(rings, color_enabled=color_enabled)
     print()
@@ -502,6 +559,81 @@ def _render_security(report, color_enabled: bool) -> None:
                 print(f"    evidence: {', '.join(finding.evidence[:5])}")
     else:
         print(green("No security posture issues found.", color_enabled))
+    if report.recommendations:
+        print("Recommendations:")
+        for recommendation in report.recommendations:
+            print(f"  - {recommendation}")
+
+
+def _render_containers(report, color_enabled: bool) -> None:
+    root_text = "yes" if report.is_root else "no"
+    print(bold(cyan("Containers", color_enabled), color_enabled))
+    print(f"Effective UID: {report.effective_uid} root={root_text}")
+    for signal in report.signals:
+        status = "yes" if signal.available else "no"
+        print(f"{signal.name:<12} {status:<3} {signal.detail}")
+        if signal.evidence:
+            print(f"  evidence: {', '.join(signal.evidence[:4])}")
+        if signal.missing:
+            print(f"  missing: {', '.join(signal.missing)}")
+    if report.findings:
+        print("Findings:")
+        for finding in report.findings:
+            print(f"  [{finding.severity.upper()}] {finding.category}: {finding.message}")
+            if finding.detail:
+                print(f"    {finding.detail}")
+            if finding.suggestion:
+                print(f"    suggestion: {finding.suggestion}")
+            if finding.evidence:
+                print(f"    evidence: {', '.join(finding.evidence[:5])}")
+    if report.recommendations:
+        print("Recommendations:")
+        for recommendation in report.recommendations:
+            print(f"  - {recommendation}")
+
+
+def _render_firewall(report, color_enabled: bool) -> None:
+    print(bold(cyan("Firewall", color_enabled), color_enabled))
+    for backend in report.backends:
+        state = "yes" if backend.available else "no"
+        print(f"{backend.name:<12} {state:<3} command={backend.command}")
+        if backend.policy:
+            print(f"  default policy: {backend.policy}")
+        if backend.missing:
+            print(f"  missing: {', '.join(backend.missing)}")
+    if report.mappings:
+        print("Listening socket mapping:")
+        for mapping in report.mappings[:20]:
+            print(f"  {mapping.backend:<10} {mapping.protocol}/{mapping.port:<5} {mapping.address:<15} {mapping.decision}")
+            print(f"    {mapping.reason}")
+            if mapping.rule:
+                print(f"    rule: {mapping.rule}")
+    else:
+        print("No matching firewall mappings found.")
+    if report.recommendations:
+        print("Recommendations:")
+        for recommendation in report.recommendations:
+            print(f"  - {recommendation}")
+
+
+def _render_performance(report, color_enabled: bool) -> None:
+    print(bold(cyan("Performance", color_enabled), color_enabled))
+    if report.pressure:
+        print("Pressure Stall Information:")
+        for sample in report.pressure:
+            print(f"  {sample.resource}: some={sample.some_avg10}/{sample.some_avg60}/{sample.some_avg300} full={sample.full_avg10}/{sample.full_avg60}/{sample.full_avg300}")
+    if report.interrupts:
+        print("Interrupt load:")
+        for cpu in report.interrupts[:8]:
+            print(f"  {cpu.cpu:<8} {cpu.total}")
+    if report.softirqs:
+        print("Softirq load:")
+        for cpu in report.softirqs[:8]:
+            print(f"  {cpu.cpu:<8} {cpu.total}")
+    if report.slabinfo:
+        print("Slab caches:")
+        for cache in report.slabinfo[:12]:
+            print(f"  {cache.name:<24} active={cache.active_objs:<8} size={cache.object_size:<6} bytes={cache.active_bytes}")
     if report.recommendations:
         print("Recommendations:")
         for recommendation in report.recommendations:
