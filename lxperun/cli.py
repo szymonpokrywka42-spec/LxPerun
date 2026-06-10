@@ -178,6 +178,10 @@ def _print_snapshot(json_output: bool, raw: bool, color_enabled: bool) -> None:
     if json_output:
         print(json.dumps(info.to_dict(), indent=2))
         return
+    _render_snapshot(info, raw=raw, color_enabled=color_enabled)
+
+
+def _render_snapshot(info, raw: bool, color_enabled: bool) -> None:
     print(cyan("System", color_enabled))
     print(f"Host:      {info.identity.hostname}")
     print(f"Kernel:    {info.identity.kernel} ({info.identity.machine})")
